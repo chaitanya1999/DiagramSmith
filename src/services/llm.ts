@@ -1,0 +1,117 @@
+import type { LlmConfig } from '../types';
+import { SYSTEM_PROMPT, REQUEST_TIMEOUT_MS } from '../utils/constants';
+
+export type LlmErrorCode = 'invalid_key' | 'timeout' | 'malformed_response' | 'network_error' | 'unsupported_model';
+
+export class LlmError extends Error {
+  public readonly code: LlmErrorCode;
+
+  constructor(message: string, code: LlmErrorCode) {
+    super(message);
+    this.name = 'LlmError';
+    this.code = code;
+  }
+}
+
+interface ChatCompletionMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+interface ChatCompletionRequest {
+  model: string;
+  messages: ChatCompletionMessage[];
+  temperature: number;
+  // max_tokens: number;
+}
+
+interface ChatCompletionResponse {
+  choices: {
+    message: {
+      content: string;
+    };
+  }[];
+}
+
+/**
+ * Sends the current Mermaid diagram + user instruction to an OpenAI-compatible LLM
+ * and returns the updated Mermaid syntax.
+ */
+export async function editDiagram(
+  currentMermaid: string,
+  instruction: string,
+  config: LlmConfig
+): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const requestBody: ChatCompletionRequest = {
+      model: config.model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: `Current Mermaid diagram:\n\`\`\`\n${currentMermaid}\n\`\`\`\n\nUser instruction: ${instruction}` },
+      ],
+      temperature: config.temperature,
+      // max_tokens: config.maxTokens,
+    };
+
+    const response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+
+    if (response.status === 401) {
+      throw new LlmError('Invalid API key. Please check your settings.', 'invalid_key');
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new LlmError(
+        `API error (${response.status}): ${errorText}`,
+        'network_error'
+      );
+    }
+
+    const data: ChatCompletionResponse = await response.json();
+    const content = data.choices?.[0]?.message?.content?.trim();
+
+    if (!content) {
+      throw new LlmError('LLM returned an empty response.', 'malformed_response');
+    }
+
+    // Strip any accidental markdown code fences
+    const cleaned = content
+      .replace(/^```(?:mermaid)?\s*\n?/i, '')
+      .replace(/\n?```\s*$/i, '')
+      .trim();
+
+    if (!cleaned) {
+      throw new LlmError('LLM returned an empty response after cleaning.', 'malformed_response');
+    }
+
+    return cleaned;
+  } catch (e: unknown) {
+    if (e instanceof LlmError) throw e;
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new LlmError('Request timed out. Please check your API endpoint and try again.', 'timeout');
+    }
+    if (e instanceof TypeError && e.message.includes('fetch')) {
+      throw new LlmError(
+        'Network error. Please check your Base URL and ensure the API is reachable.',
+        'network_error'
+      );
+    }
+    throw new LlmError(
+      `Unexpected error: ${e instanceof Error ? e.message : 'Unknown error'}`,
+      'network_error'
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
