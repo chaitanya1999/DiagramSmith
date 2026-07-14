@@ -13,13 +13,14 @@ export function DiagramView({ mermaidCode, isLoading }: DiagramViewProps) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scale, setScale] = useState(1);
+  const renderIdRef = useRef(0);
 
   // Render SVG from mermaid code
   useEffect(() => {
     let cancelled = false;
     setError(null);
 
-    render(mermaidCode)
+    render(mermaidCode, `diagram-${++renderIdRef.current}`)
       .then((result) => {
         if (!cancelled) {
           setSvg(result);

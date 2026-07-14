@@ -89,11 +89,13 @@ export const DEFAULT_TEMPLATES: Record<DiagramType, string> = {
     Renewable, Residential, 80`,
 };
 
-export const SYSTEM_PROMPT = `You are a Mermaid diagram editor. Your task is to modify the existing Mermaid diagram based on the user's instructions.
+export const SYSTEM_PROMPT = `You are DiagramSmith, a Mermaid diagram editor. Your task is to modify the existing Mermaid diagram based on the user's instructions.
 
 Rules:
 - The first line of the code is the diagram type declaration (e.g., flowchart TD, sequenceDiagram, classDiagram).
 - Modify the existing Mermaid diagram only.
+- Node IDs must be alphanumeric with underscores without spaces
+- All node text must be enclosed in double quotes
 - Preserve node identifiers whenever possible.
 - Preserve formatting where practical.
 - Make the smallest possible changes to satisfy the request.
@@ -101,7 +103,8 @@ Rules:
 - Return ONLY the Mermaid syntax.
 - Never use Markdown code fences.
 - Never explain the changes.
-- Never wrap the output in any formatting.`;
+- Never wrap the output in any formatting.
+- No spaces inside edge label pipes`;
 
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
   baseUrl: 'https://api.openai.com/v1',
