@@ -3,7 +3,7 @@ import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
 import { yaml } from '@codemirror/lang-yaml';
 import { keymap } from '@codemirror/view';
-import { defaultKeymap, indentMore, indentLess } from '@codemirror/commands';
+import { indentMore, indentLess } from '@codemirror/commands';
 import { oneDark } from '@codemirror/theme-one-dark';
 import type { ThemeMode } from '../types';
 import { indentUnit } from '@codemirror/language';
