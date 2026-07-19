@@ -3,9 +3,20 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 interface PromptBarProps {
   onSubmit: (instruction: string) => void;
   isLoading: boolean;
+  includeSummary: boolean;
+  generateSummary: boolean;
+  onIncludeSummaryChange: (value: boolean) => void;
+  onGenerateSummaryChange: (value: boolean) => void;
 }
 
-export function PromptBar({ onSubmit, isLoading }: PromptBarProps) {
+export function PromptBar({
+  onSubmit,
+  isLoading,
+  includeSummary,
+  generateSummary,
+  onIncludeSummaryChange,
+  onGenerateSummaryChange,
+}: PromptBarProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [instruction, setInstruction] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -42,7 +53,7 @@ export function PromptBar({ onSubmit, isLoading }: PromptBarProps) {
 
   return (
     <div className="position-fixed start-50 translate-middle-x" style={{ bottom: '2rem', zIndex: 1050, width: 'min(600px, 90%)' }}>
-      <div className="card shadow-lg border-0">
+      <div className="card prompt-bar-card shadow-lg border-1">
         {!isExpanded ? (
           <button
             className="btn btn-light w-100 text-center py-2"
@@ -63,6 +74,36 @@ export function PromptBar({ onSubmit, isLoading }: PromptBarProps) {
               disabled={isLoading}
               style={{ resize: 'vertical' }}
             />
+            <div className="d-flex align-items-center gap-3 mb-2 flex-wrap">
+              <div className="form-check form-switch mb-0">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  role="switch"
+                  id="include-summary-switch"
+                  checked={includeSummary}
+                  onChange={(e) => onIncludeSummaryChange(e.target.checked)}
+                  disabled={isLoading}
+                />
+                <label className="form-check-label small" htmlFor="include-summary-switch">
+                  Include Summary in prompt
+                </label>
+              </div>
+              <div className="form-check form-switch mb-0">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  role="switch"
+                  id="generate-summary-switch"
+                  checked={generateSummary}
+                  onChange={(e) => onGenerateSummaryChange(e.target.checked)}
+                  disabled={isLoading}
+                />
+                <label className="form-check-label small" htmlFor="generate-summary-switch">
+                  LLM Generate Summary
+                </label>
+              </div>
+            </div>
             <div className="d-flex justify-content-end gap-2">
               <button
                 className="btn btn-sm btn-outline-secondary"

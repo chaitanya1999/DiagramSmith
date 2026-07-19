@@ -8,12 +8,16 @@ interface ToolbarProps {
   isSplitView: boolean;
   isDark: boolean;
   diagramType: DiagramType;
+  wordWrap: boolean;
   onToggleSplitView: () => void;
+  onToggleWordWrap: () => void;
   onOpenSettings: () => void;
   onNewDiagram: (type: DiagramType) => void;
   onExportMermaid: () => void;
+  onExportProject: () => void;
   onCopyMermaid: () => void;
   onImportMermaid: (content: string) => Promise<boolean>;
+  onImportProject: (content: string) => Promise<boolean>;
   onToggleTheme: () => void;
 }
 
@@ -21,16 +25,21 @@ export function Toolbar({
   isSplitView,
   isDark,
   diagramType,
+  wordWrap,
   onToggleSplitView,
+  onToggleWordWrap,
   onOpenSettings,
   onNewDiagram,
   onExportMermaid,
+  onExportProject,
   onCopyMermaid,
   onImportMermaid,
+  onImportProject,
   onToggleTheme,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [showDiagramDropdown, setShowDiagramDropdown] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
 
   const handleImportClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -43,7 +52,23 @@ export function Toolbar({
 
       try {
         const text = await file.text();
-        const success = await onImportMermaid(text);
+
+        // Try to detect if it's a .dsmith.json project file
+        let success = false;
+        if (file.name.endsWith('.dsmith.json') || file.name.endsWith('.json')) {
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed.mermaid === 'string') {
+              success = await onImportProject(text);
+              if (success) return;
+            }
+          } catch {
+            // Not a JSON project file, fall through to .mmd import
+          }
+        }
+
+        // Fall back to .mmd import
+        success = await onImportMermaid(text);
         if (!success) {
           alert('Invalid Mermaid diagram file.');
         }
@@ -53,12 +78,12 @@ export function Toolbar({
 
       e.target.value = '';
     },
-    [onImportMermaid]
+    [onImportMermaid, onImportProject]
   );
 
   return (
     <div className="toolbar d-flex align-items-center gap-2 px-3 py-2 border-bottom">
-      <span className="fw-bold text-primary me-2 fs-5">DiagramSmith</span>
+      <span className="app-title me-2 fs-5 fw-bold">✨ DiagramSmith</span>
 
       <div className="vr" />
 
@@ -70,10 +95,18 @@ export function Toolbar({
         {isSplitView ? '📐 Diagram' : '✂️ Split'}
       </button>
 
+      <button
+        className="btn btn-sm btn-outline-secondary"
+        onClick={onToggleWordWrap}
+        title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+      >
+        {wordWrap ? '↩ Wrap' : '↩ No Wrap'}
+      </button>
+
       <div className="vr" />
 
       {/* Diagram Type Dropdown Button */}
-      <Dropdown show={showDropdown} onToggle={setShowDropdown}>
+      <Dropdown show={showDiagramDropdown} onToggle={setShowDiagramDropdown}>
         <Dropdown.Toggle
           variant="outline-secondary"
           size="sm"
@@ -90,7 +123,7 @@ export function Toolbar({
               active={dt === diagramType}
               onClick={() => {
                 onNewDiagram(dt);
-                setShowDropdown(false);
+                setShowDiagramDropdown(false);
               }}
             >
               <span className="me-2">{DIAGRAM_ICONS[dt]}</span>
@@ -103,14 +136,14 @@ export function Toolbar({
       <button
         className="btn btn-sm btn-outline-secondary"
         onClick={handleImportClick}
-        title="Import Mermaid from .mmd file"
+        title="Import from .mmd or .dsmith.json file"
       >
         📥 Import
       </button>
       <input
         ref={fileInputRef}
         type="file"
-        accept=".mmd,.txt"
+        accept=".mmd,.txt,.json,.dsmith.json"
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
@@ -123,13 +156,37 @@ export function Toolbar({
         📋 Copy
       </button>
 
-      <button
-        className="btn btn-sm btn-outline-secondary"
-        onClick={onExportMermaid}
-        title="Export as .mmd file"
-      >
-        💾 Export
-      </button>
+      {/* Export Dropdown Button */}
+      <Dropdown show={showExportDropdown} onToggle={setShowExportDropdown}>
+        <Dropdown.Toggle
+          variant="outline-secondary"
+          size="sm"
+          id="export-dropdown"
+          className="d-flex align-items-center gap-1"
+        >
+          💾 Export
+        </Dropdown.Toggle>
+        <Dropdown.Menu>
+          <Dropdown.Item
+            onClick={() => {
+              onExportMermaid();
+              setShowExportDropdown(false);
+            }}
+          >
+            <span className="me-2">📄</span>
+            Export .mmd
+          </Dropdown.Item>
+          <Dropdown.Item
+            onClick={() => {
+              onExportProject();
+              setShowExportDropdown(false);
+            }}
+          >
+            <span className="me-2">📦</span>
+            Export Project (.dsmith.json)
+          </Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown>
 
       <div className="ms-auto d-flex align-items-center gap-2">
         <button

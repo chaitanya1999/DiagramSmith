@@ -1,11 +1,21 @@
 import { useState, useCallback } from 'react';
 import { editDiagram, LlmError } from '../services/llm';
 import type { LlmConfig } from '../types';
+import type { EditDiagramResult } from '../services/llm';
 
 interface UseLLMReturn {
   isLoading: boolean;
   error: string | null;
-  generate: (currentMermaid: string, instruction: string, config: LlmConfig) => Promise<string | null>;
+  generate: (
+    currentMermaid: string,
+    instruction: string,
+    config: LlmConfig,
+    options?: {
+      includeSummary?: boolean;
+      generateSummary?: boolean;
+      currentSummary?: string;
+    }
+  ) => Promise<EditDiagramResult | null>;
   clearError: () => void;
 }
 
@@ -14,11 +24,20 @@ export function useLLM(): UseLLMReturn {
   const [error, setError] = useState<string | null>(null);
 
   const generate = useCallback(
-    async (currentMermaid: string, instruction: string, config: LlmConfig): Promise<string | null> => {
+    async (
+      currentMermaid: string,
+      instruction: string,
+      config: LlmConfig,
+      options?: {
+        includeSummary?: boolean;
+        generateSummary?: boolean;
+        currentSummary?: string;
+      }
+    ): Promise<EditDiagramResult | null> => {
       setIsLoading(true);
       setError(null);
       try {
-        const result = await editDiagram(currentMermaid, instruction, config);
+        const result = await editDiagram(currentMermaid, instruction, config, options);
         return result;
       } catch (e) {
         if (e instanceof LlmError) {

@@ -28,6 +28,11 @@ export interface DiagramState {
   error: string | null;
 }
 
+export interface DiagramDocument {
+  mermaid: string;
+  summary: string;
+}
+
 export type ViewMode = 'diagram-only' | 'split';
 
 export const DIAGRAM_DISPLAY_NAMES: Record<DiagramType, string> = {

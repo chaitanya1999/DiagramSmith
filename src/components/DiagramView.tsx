@@ -7,12 +7,16 @@ interface DiagramViewProps {
   isLoading?: boolean;
 }
 
+const MIN_SCALE = 0.3;
+const MAX_SCALE = 10;
+const DEFAULT_SCALE = 2.5;
+
 export function DiagramView({ mermaidCode, isLoading }: DiagramViewProps) {
   const svgWrapperRef = useRef<HTMLDivElement>(null);
   const panzoomRef = useRef<ReturnType<typeof Panzoom> | null>(null);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [scale, setScale] = useState(1);
+  const [scale, setScale] = useState(DEFAULT_SCALE);
   const renderIdRef = useRef(0);
 
   // Render SVG from mermaid code
@@ -52,10 +56,10 @@ export function DiagramView({ mermaidCode, isLoading }: DiagramViewProps) {
     const elem = svgWrapperRef.current;
 
     const panzoom = Panzoom(elem, {
-      maxScale: 5,
-      minScale: 0.3,
+      maxScale: MAX_SCALE,
+      minScale: MIN_SCALE,
       step: 0.1,
-      startScale: 1,
+      startScale: DEFAULT_SCALE,
       startX: 0,
       startY: 0,
       canvas: false,
@@ -109,10 +113,18 @@ export function DiagramView({ mermaidCode, isLoading }: DiagramViewProps) {
     }
   }, []);
 
+  const handleSliderChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newScale = parseFloat(e.target.value) / 100;
+    if (panzoomRef.current) {
+      panzoomRef.current.zoom(newScale);
+      setScale(panzoomRef.current.getScale());
+    }
+  }, []);
+
   return (
     <div className="diagram-view h-100 position-relative" style={{ overflow: 'hidden' }}>
       {isLoading && (
-        <div className="position-absolute top-0 start-0 end-0 text-center py-2 bg-dark bg-opacity-75 text-white" style={{ zIndex: 10 }}>
+        <div className="position-absolute top-0 start-0 end-0 text-center py-2 loading-overlay" style={{ zIndex: 10 }}>
           <div className="spinner-border spinner-border-sm me-2" role="status" />
           Generating diagram...
         </div>
@@ -120,17 +132,27 @@ export function DiagramView({ mermaidCode, isLoading }: DiagramViewProps) {
 
       {/* Zoom controls overlay */}
       {svg && (
-        <div className="position-absolute top-0 end-0 m-2 d-flex flex-column gap-1" style={{ zIndex: 5 }}>
-          <button className="btn btn-sm btn-dark bg-opacity-75 border-0" onClick={handleZoomIn} title="Zoom in">
+        <div className="position-absolute top-0 end-0 m-2 d-flex flex-column align-items-center gap-1 zoom-controls" style={{ zIndex: 5 }}>
+          <button className="btn btn-sm btn-outline-secondary border-0 zoom-btn" onClick={handleZoomIn} title="Zoom in">
             <strong>+</strong>
           </button>
-          <button className="btn btn-sm btn-dark bg-opacity-75 border-0" onClick={handleZoomOut} title="Zoom out">
+          <input
+            type="range"
+            className="form-range zoom-slider"
+            min={MIN_SCALE * 100}
+            max={MAX_SCALE * 100}
+            step={5}
+            value={Math.round(scale * 100)}
+            onChange={handleSliderChange}
+            title={`Zoom: ${Math.round(scale * 100)}%`}
+          />
+          <button className="btn btn-sm btn-outline-secondary border-0 zoom-btn" onClick={handleZoomOut} title="Zoom out">
             <strong>−</strong>
           </button>
-          <button className="btn btn-sm btn-dark bg-opacity-75 border-0" onClick={handleReset} title="Reset zoom">
+          <button className="btn btn-sm btn-outline-secondary border-0 zoom-btn" onClick={handleReset} title="Reset zoom to 250%">
             ⟲
           </button>
-          <span className="text-center text-white small bg-dark bg-opacity-50 rounded px-1">
+          <span className="text-center small zoom-label rounded px-1 fw-bold">
             {Math.round(scale * 100)}%
           </span>
         </div>

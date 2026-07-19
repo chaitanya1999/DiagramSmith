@@ -1,6 +1,86 @@
 /* Import Bootstrap CSS */
 @import 'bootstrap/dist/css/bootstrap.min.css';
 
+/* ============================================
+   CSS Variables for Light & Dark Themes
+   ============================================ */
+:root {
+  --app-bg: #F5F7FA;
+  --app-text: #1A1D23;
+  --app-text-secondary: #6B7280;
+  --surface-bg: #FFFFFF;
+  --surface-border: #E5E7EB;
+  --toolbar-bg: #FFFFFF;
+  --toolbar-border: #E0E4E8;
+  --editor-bg: #FAFBFC;
+  --diagram-bg: #F0F2F5;
+  --accent: #4A6CF7;
+  --accent-hover: #3B5DE7;
+  --accent-light: rgba(74, 108, 247, 0.1);
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --scrollbar-thumb: #D1D5DB;
+  --scrollbar-track: transparent;
+  --panel-handle: #D1D5DB;
+  --panel-handle-hover: #4A6CF7;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s ease;
+
+  /* Syntax highlighting colors (light) */
+  --syntax-keyword: #1565C0;
+  --syntax-attribute: #6A1B9A;
+  --syntax-operator: #E65100;
+  --syntax-string: #2E7D32;
+  --syntax-number: #00838F;
+  --syntax-comment: #757575;
+  --syntax-punctuation: #78909C;
+  --syntax-definition: #00897B;
+  --syntax-attribute-value: #6A1B9A;
+}
+
+[data-bs-theme="dark"] {
+  --app-bg: #1A1D23;
+  --app-text: #E8EAED;
+  --app-text-secondary: #9CA3AF;
+  --surface-bg: #252830;
+  --surface-border: #353840;
+  --toolbar-bg: #252830;
+  --toolbar-border: #353840;
+  --editor-bg: #1E2128;
+  --diagram-bg: #16181D;
+  --accent: #6B8CFF;
+  --accent-hover: #7D9BFF;
+  --accent-light: rgba(107, 140, 255, 0.15);
+  --success: #4ADE80;
+  --warning: #FBBF24;
+  --danger: #F87171;
+  --scrollbar-thumb: #4B5563;
+  --scrollbar-track: transparent;
+  --panel-handle: #4B5563;
+  --panel-handle-hover: #6B8CFF;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* Syntax highlighting colors (dark) */
+  --syntax-keyword: #64B5F6;
+  --syntax-attribute: #CE93D8;
+  --syntax-operator: #FFB74D;
+  --syntax-string: #81C784;
+  --syntax-number: #4DD0E1;
+  --syntax-comment: #9E9E9E;
+  --syntax-punctuation: #90A4AE;
+  --syntax-definition: #4DB6AC;
+  --syntax-attribute-value: #CE93D8;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
 html, body, #root {
   margin: 0;
   padding: 0;
@@ -10,128 +90,623 @@ html, body, #root {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 
-/* Toolbar styling */
+/* ============================================
+   Scrollbar Styling
+   ============================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-text-secondary);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* ============================================
+   Toolbar Styling
+   ============================================ */
 .toolbar {
   flex-shrink: 0;
   user-select: none;
+  background-color: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-border);
+  transition: background-color var(--transition-normal), border-color var(--transition-normal);
 }
 
-/* Diagram view styling */
+.toolbar .btn-outline-secondary {
+  color: var(--app-text-secondary);
+  border-color: var(--surface-border);
+  transition: all var(--transition-fast);
+}
+
+.toolbar .btn-outline-secondary:hover {
+  color: var(--accent);
+  background-color: var(--accent-light);
+  border-color: var(--accent);
+}
+
+.toolbar .btn-outline-secondary:active {
+  background-color: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* ============================================
+   Diagram View Styling
+   ============================================ */
 .diagram-view {
-  background-color: #fafafa;
-  transition: background-color 0.3s ease;
+  background-color: var(--diagram-bg);
+  transition: background-color var(--transition-normal);
 }
 
-[data-bs-theme="dark"] .diagram-view {
-  background-color: #1a1a2e;
+/* ============================================
+   Zoom Controls Styling
+   ============================================ */
+.zoom-controls {
+  background: color-mix(in srgb, var(--surface-bg) 85%, transparent);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--surface-border);
+  transition: background var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-normal);
 }
 
+.zoom-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  border-radius: 8px !important;
+  background: transparent;
+  color: var(--app-text-secondary);
+  border: none;
+  transition: all var(--transition-fast);
+}
 
+.zoom-btn:hover {
+  background: var(--accent-light);
+  color: var(--accent);
+}
 
-/* CodeMirror customizations */
+/* Vertical range slider for zoom */
+.zoom-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 32px;
+  height: 120px;
+  padding: 0;
+  margin: 2px 0;
+  cursor: pointer;
+}
+
+.zoom-slider::-webkit-slider-runnable-track {
+  width: 4px;
+  height: 100%;
+  background: var(--surface-border);
+  border-radius: 2px;
+}
+
+.zoom-slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface-bg);
+  box-shadow: var(--shadow-sm);
+  -webkit-appearance: none;
+  appearance: none;
+  margin-left: -5px;
+  transition: transform var(--transition-fast);
+}
+
+.zoom-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.zoom-slider::-moz-range-track {
+  width: 4px;
+  height: 100%;
+  background: var(--surface-border);
+  border-radius: 2px;
+}
+
+.zoom-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.zoom-label {
+  background: var(--accent-light);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  min-width: 40px;
+  text-align: center;
+  border-radius: 4px;
+}
+
+/* ============================================
+   CodeMirror Customizations
+   ============================================ */
 .cm-editor {
   font-size: 13px;
+  height: 100%;
 }
 
 .cm-editor .cm-scroller {
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  overflow: auto;
 }
 
-/* Toast styling */
+/* Syntax highlighting - Light theme */
+.cm-editor .cm-keyword { color: var(--syntax-keyword); font-weight: 700; }
+.cm-editor .cm-attributeName { color: var(--syntax-attribute); font-weight: 600; }
+.cm-editor .cm-operator { color: var(--syntax-operator); font-weight: 700; }
+.cm-editor .cm-string { color: var(--syntax-string); }
+.cm-editor .cm-number { color: var(--syntax-number); }
+.cm-editor .cm-comment { color: var(--syntax-comment); font-style: italic; }
+.cm-editor .cm-punctuation { color: var(--syntax-punctuation); }
+.cm-editor .cm-definitionKeyword { color: var(--syntax-definition); font-weight: 600; }
+.cm-editor .cm-attributeValue { color: var(--syntax-attribute-value); font-weight: 600; }
+
+/* CodeMirror editor background */
+.cm-editor.cm-focused {
+  outline: none;
+}
+
+/* ============================================
+   Toast Styling
+   ============================================ */
 .toast-container {
   z-index: 1060 !important;
 }
 
-/* Card shadow for prompt bar */
+.toast {
+  border-radius: 8px !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* ============================================
+   Card Styling (PromptBar)
+   ============================================ */
 .card {
   border-radius: 12px;
+  border: 1px solid var(--surface-border);
+  background-color: var(--surface-bg);
+  color: var(--app-text);
+  box-shadow: var(--shadow-lg);
+  transition: background-color var(--transition-normal), border-color var(--transition-normal), box-shadow var(--transition-normal);
 }
 
-/* Panel resize handle hover effect */
+.card .btn-light {
+  background-color: var(--surface-bg);
+  border-color: var(--surface-border);
+  color: var(--app-text);
+  transition: all var(--transition-fast);
+}
+
+.card .btn-light:hover {
+  background-color: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ============================================
+   Panel Resize Handle
+   ============================================ */
+[data-panel-group-direction="horizontal"] > [data-resize-handle-active],
+[data-panel-group-direction="vertical"] > [data-resize-handle-active] {
+  background-color: var(--panel-handle-hover) !important;
+  transition: background-color var(--transition-fast);
+}
+
+/* ============================================
+   Dropdown Styling
+   ============================================ */
+.dropdown-menu {
+  background-color: var(--surface-bg);
+  border-color: var(--surface-border);
+  box-shadow: var(--shadow-md);
+}
+
+.dropdown-item {
+  color: var(--app-text);
+  transition: all var(--transition-fast);
+}
+
+.dropdown-item:hover,
+.dropdown-item.active {
+  background-color: var(--accent-light);
+  color: var(--accent);
+}
+
+.dropdown-item.active {
+  font-weight: 600;
+}
+
+/* ============================================
+   Modal Styling
+   ============================================ */
+.modal-content {
+  background-color: var(--surface-bg);
+  border-color: var(--surface-border);
+  color: var(--app-text);
+}
+
+.modal-header {
+  border-bottom-color: var(--surface-border);
+}
+
+.modal-footer {
+  border-top-color: var(--surface-border);
+}
+
+/* ============================================
+   Form Controls
+   ============================================ */
+.form-control {
+  background-color: var(--editor-bg);
+  border-color: var(--surface-border);
+  color: var(--app-text);
+  transition: all var(--transition-fast);
+}
+
+.form-control:focus {
+  background-color: var(--editor-bg);
+  border-color: var(--accent);
+  color: var(--app-text);
+  box-shadow: 0 0 0 0.2rem var(--accent-light);
+}
+
+.form-control::placeholder {
+  color: var(--app-text-secondary);
+}
+
+/* Form range (slider) */
+.form-range::-webkit-slider-runnable-track {
+  background: var(--surface-border);
+}
+
+.form-range::-webkit-slider-thumb {
+  background: var(--accent);
+}
+
+.form-range::-moz-range-track {
+  background: var(--surface-border);
+}
+
+.form-range::-moz-range-thumb {
+  background: var(--accent);
+}
+
+/* ============================================
+   Form Check (Switches)
+   ============================================ */
+.form-check-input:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.form-check-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 0.2rem var(--accent-light);
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+.btn-primary {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  transition: all var(--transition-fast);
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-outline-secondary {
+  color: var(--app-text-secondary);
+  border-color: var(--surface-border);
+  transition: all var(--transition-fast);
+}
+
+.btn-outline-secondary:hover {
+  color: var(--accent);
+  background-color: var(--accent-light);
+  border-color: var(--accent);
+}
+
+/* ============================================
+   Textarea (Summary)
+   ============================================ */
+textarea.form-control.border-0 {
+  background-color: var(--editor-bg);
+  color: var(--app-text);
+}
+
+/* ============================================
+   Text Muted
+   ============================================ */
+.text-muted {
+  color: var(--app-text-secondary) !important;
+}
+
+/* ============================================
+   VR (Vertical Rule)
+   ============================================ */
+.vr {
+  background-color: var(--surface-border);
+  opacity: 1;
+}
+
+/* ============================================
+   Border Bottom (Headers)
+   ============================================ */
+.border-bottom {
+  border-bottom-color: var(--surface-border) !important;
+}
+
+/* ============================================
+   Background Utilities
+   ============================================ */
+.bg-secondary {
+  background-color: var(--panel-handle) !important;
+}
+
+.bg-danger {
+  background-color: var(--danger) !important;
+}
+
+/* ============================================
+   Prompt Bar Enhancements
+   ============================================ */
+.prompt-bar-card {
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-lg);
+  transition: all var(--transition-normal);
+}
+
+.prompt-bar-card:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light), var(--shadow-lg);
+}
+
+/* ============================================
+   Mermaid Editor Panel Header
+   ============================================ */
+.editor-header {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface-bg)), color-mix(in srgb, #8B5CF6 8%, var(--surface-bg)));
+  border-bottom: 1px solid var(--surface-border);
+  border-left: 3px solid var(--accent);
+  transition: background var(--transition-normal), border-color var(--transition-normal);
+}
+
+.editor-header-text {
+  color: var(--accent) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.3px;
+}
+
+/* ============================================
+   Summary Panel
+   ============================================ */
+.summary-header {
+  background: linear-gradient(135deg, color-mix(in srgb, #8B5CF6 8%, var(--surface-bg)), color-mix(in srgb, #EC4899 8%, var(--surface-bg)));
+  border-bottom: 1px solid var(--surface-border);
+  border-left: 3px solid #8B5CF6;
+  transition: background var(--transition-normal), border-color var(--transition-normal);
+}
+
+.summary-header-text {
+  color: #8B5CF6 !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.3px;
+}
+
+/* ============================================
+   Loading Overlay
+   ============================================ */
+.loading-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  color: #fff;
+}
+
+[data-bs-theme="dark"] .loading-overlay {
+  background: rgba(255, 255, 255, 0.85);
+  color: #1A1D23;
+}
+
+/* ============================================
+   Error Footer
+   ============================================ */
+.error-footer {
+  background-color: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-top: 1px solid var(--danger);
+}
+
+/* ============================================
+   App Title
+   ============================================ */
+.app-title {
+  background: linear-gradient(135deg, var(--accent), #8B5CF6, #EC4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  transition: all var(--transition-normal);
+}
+
+/* ============================================
+   Panel Separators (Resize Handles)
+   ============================================ */
 [data-panel-group-direction="horizontal"] > [data-resize-handle-active] {
-  background-color: #0d6efd !important;
-  transition: background-color 0.2s ease;
+  background: linear-gradient(180deg, var(--accent), #8B5CF6) !important;
 }
 
-/* Dark mode overrides for Bootstrap components */
-[data-bs-theme="dark"] .toolbar {
-  background-color: #212529 !important;
-  border-bottom-color: #373b3e !important;
+[data-panel-group-direction="vertical"] > [data-resize-handle-active] {
+  background: linear-gradient(90deg, var(--accent), #8B5CF6) !important;
 }
 
-[data-bs-theme="dark"] .btn-outline-secondary {
-  color: #adb5bd;
-  border-color: #495057;
+/* Default separator styling */
+[data-panel] + [data-resize-handle] {
+  transition: background-color var(--transition-fast);
+  position: relative;
 }
 
-[data-bs-theme="dark"] .btn-outline-secondary:hover {
-  color: #fff;
-  background-color: #495057;
-  border-color: #6c757d;
+[data-panel] + [data-resize-handle]:hover {
+  background-color: var(--panel-handle-hover) !important;
 }
 
-[data-bs-theme="dark"] .dropdown-menu {
-  background-color: #2b3035;
-  border-color: #495057;
+/* ============================================
+   Prompt Bar Collapsed Button
+   ============================================ */
+.prompt-bar-card .btn-light {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 5%, var(--surface-bg)), color-mix(in srgb, #8B5CF6 5%, var(--surface-bg)));
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+  border-radius: 10px;
+  transition: all var(--transition-fast);
 }
 
-[data-bs-theme="dark"] .dropdown-item {
-  color: #adb5bd;
+.prompt-bar-card .btn-light:hover {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--surface-bg)), color-mix(in srgb, #8B5CF6 12%, var(--surface-bg)));
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-light);
 }
 
-[data-bs-theme="dark"] .dropdown-item:hover,
-[data-bs-theme="dark"] .dropdown-item.active {
-  background-color: #373b3e;
-  color: #fff;
+/* ============================================
+   Settings Button (Gear)
+   ============================================ */
+.toolbar .btn:has(> :only-child:not(.vr)):last-child {
+  border-radius: 8px;
 }
 
-[data-bs-theme="dark"] .modal-content {
-  background-color: #2b3035;
-  border-color: #495057;
+/* ============================================
+   Theme Toggle Button
+   ============================================ */
+.toolbar .btn:has(> :only-child):hover {
+  transform: scale(1.05);
 }
 
-[data-bs-theme="dark"] .form-control {
-  background-color: #1f1f1f;
-  border-color: #495057;
-  color: #e0e0e0;
+/* ============================================
+   Dropdown Toggle Arrow Color
+   ============================================ */
+.dropdown-toggle::after {
+  color: var(--app-text-secondary);
+  transition: color var(--transition-fast);
 }
 
-[data-bs-theme="dark"] .form-control:focus {
-  background-color: #1f1f1f;
-  border-color: #0d6efd;
-  color: #e0e0e0;
+.dropdown-toggle:hover::after {
+  color: var(--accent);
 }
 
-/* Card in PromptBar */
-[data-bs-theme="dark"] .card {
-  background-color: #2b3035;
-  color: #e0e0e0;
+/* ============================================
+   Toast Variant Colors
+   ============================================ */
+.toast.text-bg-success {
+  background: linear-gradient(135deg, #22C55E, #16A34A) !important;
 }
 
-[data-bs-theme="dark"] .card .btn-light {
-  background-color: #373b3e;
-  border-color: #495057;
-  color: #e0e0e0;
+.toast.text-bg-danger {
+  background: linear-gradient(135deg, #EF4444, #DC2626) !important;
 }
 
-[data-bs-theme="dark"] .card .btn-light:hover {
-  background-color: #495057;
+.toast.text-bg-info {
+  background: linear-gradient(135deg, var(--accent), #6366F1) !important;
 }
 
-/* Toast background in dark mode */
-[data-bs-theme="dark"] .toast {
-  background-color: #2b3035;
-  color: #e0e0e0;
+/* ============================================
+   Modal Title
+   ============================================ */
+.modal-title {
+  color: var(--accent);
+  font-weight: 700;
 }
 
-/* Resize handle */
-[data-bs-theme="dark"] .bg-secondary {
-  background-color: #495057 !important;
+/* ============================================
+   Form Switch Label
+   ============================================ */
+.form-check-label {
+  color: var(--app-text);
+  font-weight: 500;
 }
 
-/* VR (vertical rule) */
-[data-bs-theme="dark"] .vr {
-  background-color: #495057;
+/* ============================================
+   Generate Button in Prompt Bar
+   ============================================ */
+.prompt-bar-card .btn-primary {
+  background: linear-gradient(135deg, var(--accent), #8B5CF6);
+  border: none;
+  font-weight: 600;
+  padding: 6px 18px;
+  border-radius: 8px;
+  transition: all var(--transition-fast);
+}
+
+.prompt-bar-card .btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent-hover), #7C3AED);
+  box-shadow: 0 2px 8px var(--accent-light);
+  transform: translateY(-1px);
+}
+
+.prompt-bar-card .btn-primary:disabled {
+  background: linear-gradient(135deg, var(--accent), #8B5CF6);
+  opacity: 0.5;
+}
+
+/* ============================================
+   Cancel Button in Prompt Bar
+   ============================================ */
+.prompt-bar-card .btn-outline-secondary {
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+/* ============================================
+   Diagram View Loading Spinner
+   ============================================ */
+.diagram-view .spinner-border {
+  color: var(--accent);
+}
+
+/* ============================================
+   CodeMirror Line Wrapping
+   ============================================ */
+.cm-editor .cm-lineWrapping {
+  word-break: break-word;
+  overflow-wrap: break-word;
 }

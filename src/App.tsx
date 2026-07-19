@@ -19,6 +19,9 @@ export default function App() {
   const [isSplitView, setIsSplitView] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [llmConfig, setLlmConfig] = useState<LlmConfig>(() => loadLlmConfig());
+  const [includeSummary, setIncludeSummary] = useState(true);
+  const [generateSummary, setGenerateSummary] = useState(true);
+  const [wordWrap, setWordWrap] = useState(true);
 
   const { toasts, addToast, removeToast } = useToasts();
   const { theme, toggleTheme, isDark } = useTheme();
@@ -27,11 +30,15 @@ export default function App() {
   const {
     currentMermaid,
     editorMermaid,
+    summary,
     parseError,
     setEditorMermaid,
+    setSummary,
     updateFromEditor,
     updateFromLlm,
+    updateFromLlmWithSummary,
     importMermaid,
+    importDocument,
     setMermaidDirectly,
   } = useMermaid();
 
@@ -44,6 +51,10 @@ export default function App() {
 
   const handleToggleSplitView = useCallback(() => {
     setIsSplitView((prev) => !prev);
+  }, []);
+
+  const handleToggleWordWrap = useCallback(() => {
+    setWordWrap((prev) => !prev);
   }, []);
 
   const handleOpenSettings = useCallback(() => {
@@ -68,10 +79,11 @@ export default function App() {
     (type: DiagramType) => {
       const template = changeDiagramType(type);
       setMermaidDirectly(template);
+      setSummary('');
       detectDiagramType(template);
       addToast(`New ${type} diagram created.`, 'info');
     },
-    [changeDiagramType, setMermaidDirectly, detectDiagramType, addToast]
+    [changeDiagramType, setMermaidDirectly, setSummary, detectDiagramType, addToast]
   );
 
   const handleExportMermaid = useCallback(() => {
@@ -84,12 +96,45 @@ export default function App() {
     URL.revokeObjectURL(url);
   }, [currentMermaid]);
 
+  const handleExportProject = useCallback(() => {
+    const project = JSON.stringify({ mermaid: currentMermaid, summary }, null, 2);
+    const blob = new Blob([project], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'diagram.dsmith.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [currentMermaid, summary]);
+
   const handleCopyMermaid = useCallback(() => {
     navigator.clipboard.writeText(currentMermaid).then(
       () => addToast('Mermaid code copied to clipboard.', 'success'),
       () => addToast('Failed to copy to clipboard.', 'danger')
     );
   }, [currentMermaid, addToast]);
+
+  const handleImportProject = useCallback(async (content: string): Promise<boolean> => {
+    try {
+      const parsed = JSON.parse(content);
+      if (typeof parsed.mermaid !== 'string') {
+        addToast('Invalid project file: missing mermaid field.', 'danger');
+        return false;
+      }
+      const newSummary = typeof parsed.summary === 'string' ? parsed.summary : '';
+      const success = await importDocument(parsed.mermaid, newSummary);
+      if (success) {
+        detectDiagramType(parsed.mermaid);
+        addToast('Project imported successfully.', 'success');
+      } else {
+        addToast('Invalid Mermaid diagram in project file.', 'danger');
+      }
+      return success;
+    } catch {
+      addToast('Invalid project file format.', 'danger');
+      return false;
+    }
+  }, [importDocument, detectDiagramType, addToast]);
 
   const handlePromptSubmit = useCallback(
     async (instruction: string) => {
@@ -98,17 +143,39 @@ export default function App() {
         return;
       }
       clearError();
-      const result = await generate(currentMermaid, instruction, llmConfig);
+
+      const effectiveIncludeSummary = includeSummary && summary.length > 0;
+      const effectiveGenerateSummary = generateSummary;
+
+      const result = await generate(currentMermaid, instruction, llmConfig, {
+        includeSummary: effectiveIncludeSummary,
+        generateSummary: effectiveGenerateSummary,
+        currentSummary: summary,
+      });
+
       if (result === null) return;
-      const valid = await updateFromLlm(result);
-      if (valid) {
-        detectDiagramType(result);
-        addToast('Diagram updated successfully.', 'success');
+
+      if (effectiveGenerateSummary) {
+        // LLM returned both mermaid and summary
+        const valid = await updateFromLlmWithSummary(result.mermaid, result.summary || '');
+        if (valid) {
+          detectDiagramType(result.mermaid);
+          addToast('Diagram and summary updated successfully.', 'success');
+        } else {
+          addToast('LLM returned invalid Mermaid. Your diagram was not modified.', 'danger');
+        }
       } else {
-        addToast('LLM returned invalid Mermaid. Your diagram was not modified.', 'danger');
+        // LLM returned only mermaid
+        const valid = await updateFromLlm(result.mermaid);
+        if (valid) {
+          detectDiagramType(result.mermaid);
+          addToast('Diagram updated successfully.', 'success');
+        } else {
+          addToast('LLM returned invalid Mermaid. Your diagram was not modified.', 'danger');
+        }
       }
     },
-    [currentMermaid, llmConfig, generate, clearError, updateFromLlm, addToast, detectDiagramType]
+    [currentMermaid, llmConfig, includeSummary, generateSummary, summary, generate, clearError, updateFromLlm, updateFromLlmWithSummary, addToast, detectDiagramType]
   );
 
   // Show LLM errors as toasts
@@ -149,12 +216,16 @@ export default function App() {
         onOpenSettings={handleOpenSettings}
         onNewDiagram={handleNewDiagram}
         onExportMermaid={handleExportMermaid}
+        onExportProject={handleExportProject}
         onCopyMermaid={handleCopyMermaid}
         onImportMermaid={importMermaid}
+        wordWrap={wordWrap}
+        onToggleWordWrap={handleToggleWordWrap}
+        onImportProject={handleImportProject}
         onToggleTheme={toggleTheme}
       />
 
-      <div className="flex-grow-1 position-relative" style={{ minHeight: 0 }}>
+      <div className="flex-grow-1 position-relative" style={{ minHeight: 0, backgroundColor: 'var(--app-bg)' }}>
         {isSplitView ? (
           <Group orientation="horizontal" className="h-100">
             <Panel defaultSize={50} minSize={20}>
@@ -163,6 +234,9 @@ export default function App() {
                 onChange={handleEditorChange}
                 parseError={parseError}
                 theme={theme}
+                wordWrap={wordWrap}
+                summary={summary}
+                onSummaryChange={setSummary}
               />
             </Panel>
             <Separator className="bg-secondary" style={{ width: '4px', cursor: 'col-resize' }} />
@@ -175,7 +249,14 @@ export default function App() {
         )}
       </div>
 
-      <PromptBar onSubmit={handlePromptSubmit} isLoading={isLoading} />
+      <PromptBar
+        onSubmit={handlePromptSubmit}
+        isLoading={isLoading}
+        includeSummary={includeSummary}
+        generateSummary={generateSummary}
+        onIncludeSummaryChange={setIncludeSummary}
+        onGenerateSummaryChange={setGenerateSummary}
+      />
       <SettingsDialog show={isSettingsOpen} config={llmConfig} onSave={handleSaveSettings} onCancel={handleCancelSettings} />
 
       <ToastContainer position="top-end" className="p-3">

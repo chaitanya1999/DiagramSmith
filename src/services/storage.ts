@@ -18,6 +18,23 @@ export function saveMermaid(mermaid: string): void {
   }
 }
 
+export function loadSummary(): string {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.SUMMARY);
+    return stored || '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveSummary(summary: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.SUMMARY, summary);
+  } catch (e) {
+    console.error('Failed to save summary to localStorage:', e);
+  }
+}
+
 export function loadLlmConfig(): LlmConfig {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.LLM_CONFIG);

@@ -1,5 +1,12 @@
 import type { LlmConfig } from '../types';
-import { SYSTEM_PROMPT, REQUEST_TIMEOUT_MS } from '../utils/constants';
+import {
+  SYSTEM_PROMPT,
+  SYSTEM_PROMPT_WITH_SUMMARY,
+  SYSTEM_PROMPT_GENERATE_SUMMARY,
+  SYSTEM_PROMPT_GENERATE_SUMMARY_WITH_CONTEXT,
+  SUMMARY_DELIMITER,
+  REQUEST_TIMEOUT_MS,
+} from '../utils/constants';
 
 export type LlmErrorCode = 'invalid_key' | 'timeout' | 'malformed_response' | 'network_error' | 'unsupported_model';
 
@@ -22,7 +29,6 @@ interface ChatCompletionRequest {
   model: string;
   messages: ChatCompletionMessage[];
   temperature: number;
-  // max_tokens: number;
 }
 
 interface ChatCompletionResponse {
@@ -33,27 +39,53 @@ interface ChatCompletionResponse {
   }[];
 }
 
+export interface EditDiagramResult {
+  mermaid: string;
+  summary: string | null;
+}
+
 /**
- * Sends the current Mermaid diagram + user instruction to an OpenAI-compatible LLM
- * and returns the updated Mermaid syntax.
+ * Sends the current Mermaid diagram + optional summary + user instruction to an OpenAI-compatible LLM
+ * and returns the updated Mermaid syntax and optionally a text summary.
  */
 export async function editDiagram(
   currentMermaid: string,
   instruction: string,
-  config: LlmConfig
-): Promise<string> {
+  config: LlmConfig,
+  options?: {
+    includeSummary?: boolean;
+    generateSummary?: boolean;
+    currentSummary?: string;
+  }
+): Promise<EditDiagramResult> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  // Determine which system prompt to use
+  let systemPrompt = SYSTEM_PROMPT;
+  if (options?.generateSummary && options?.includeSummary) {
+    systemPrompt = SYSTEM_PROMPT_GENERATE_SUMMARY_WITH_CONTEXT;
+  } else if (options?.generateSummary) {
+    systemPrompt = SYSTEM_PROMPT_GENERATE_SUMMARY;
+  } else if (options?.includeSummary) {
+    systemPrompt = SYSTEM_PROMPT_WITH_SUMMARY;
+  }
+
+  // Build user message
+  let userMessage = `Current Mermaid diagram:\n\`\`\`\n${currentMermaid}\n\`\`\`\n`;
+  if (options?.includeSummary && options?.currentSummary) {
+    userMessage += `\nCurrent text summary of the diagram:\n${options.currentSummary}\n`;
+  }
+  userMessage += `\nUser instruction: ${instruction}`;
 
   try {
     const requestBody: ChatCompletionRequest = {
       model: config.model,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `Current Mermaid diagram:\n\`\`\`\n${currentMermaid}\n\`\`\`\n\nUser instruction: ${instruction}` },
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
       ],
       temperature: config.temperature,
-      // max_tokens: config.maxTokens,
     };
 
     const response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
@@ -85,17 +117,19 @@ export async function editDiagram(
       throw new LlmError('LLM returned an empty response.', 'malformed_response');
     }
 
-    // Strip any accidental markdown code fences
-    const cleaned = content
-      .replace(/^```(?:mermaid)?\s*\n?/i, '')
-      .replace(/\n?```\s*$/i, '')
-      .trim();
+    // If generating summary, parse the two-part response
+    if (options?.generateSummary) {
+      return parseDualOutput(content);
+    }
+
+    // Otherwise, just clean the Mermaid syntax
+    const cleaned = cleanMermaidCode(content);
 
     if (!cleaned) {
       throw new LlmError('LLM returned an empty response after cleaning.', 'malformed_response');
     }
 
-    return cleaned;
+    return { mermaid: cleaned, summary: null };
   } catch (e: unknown) {
     if (e instanceof LlmError) throw e;
     if (e instanceof DOMException && e.name === 'AbortError') {
@@ -114,4 +148,40 @@ export async function editDiagram(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function parseDualOutput(content: string): EditDiagramResult {
+  // Strip any accidental markdown code fences from the entire response first
+  const cleaned = content
+    .replace(/^```(?:mermaid)?\s*\n?/i, '')
+    .replace(/\n?```\s*$/i, '')
+    .trim();
+
+  const delimiterIndex = cleaned.indexOf(SUMMARY_DELIMITER);
+
+  if (delimiterIndex === -1) {
+    // No delimiter found — treat the entire response as Mermaid code
+    const mermaid = cleanMermaidCode(cleaned);
+    if (!mermaid) {
+      throw new LlmError('LLM returned an empty response after cleaning.', 'malformed_response');
+    }
+    return { mermaid, summary: '' };
+  }
+
+  const mermaidPart = cleaned.substring(0, delimiterIndex).trim();
+  const summaryPart = cleaned.substring(delimiterIndex + SUMMARY_DELIMITER.length).trim();
+
+  const mermaid = cleanMermaidCode(mermaidPart);
+  if (!mermaid) {
+    throw new LlmError('LLM returned an empty Mermaid code.', 'malformed_response');
+  }
+
+  return { mermaid, summary: summaryPart || '' };
+}
+
+function cleanMermaidCode(code: string): string {
+  return code
+    .replace(/^```(?:mermaid)?\s*\n?/i, '')
+    .replace(/\n?```\s*$/i, '')
+    .trim();
 }
