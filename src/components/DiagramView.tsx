@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Panzoom from '@panzoom/panzoom';
-import { render } from '../services/mermaid';
+import { render, setMermaidTheme } from '../services/mermaid';
+import type { ThemeMode } from '../types';
 
 interface DiagramViewProps {
   mermaidCode: string;
   isLoading?: boolean;
+  theme: ThemeMode;
 }
 
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 10;
 const DEFAULT_SCALE = 2.5;
 
-export function DiagramView({ mermaidCode, isLoading }: DiagramViewProps) {
+export function DiagramView({ mermaidCode, isLoading, theme }: DiagramViewProps) {
   const svgWrapperRef = useRef<HTMLDivElement>(null);
   const panzoomRef = useRef<ReturnType<typeof Panzoom> | null>(null);
   const [svg, setSvg] = useState<string | null>(null);
@@ -23,6 +25,9 @@ export function DiagramView({ mermaidCode, isLoading }: DiagramViewProps) {
   useEffect(() => {
     let cancelled = false;
     setError(null);
+
+    // Apply theme before rendering so the diagram colors match the app theme
+    setMermaidTheme(theme);
 
     render(mermaidCode, `diagram-${++renderIdRef.current}`)
       .then((result) => {
@@ -41,7 +46,7 @@ export function DiagramView({ mermaidCode, isLoading }: DiagramViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [mermaidCode]);
+  }, [mermaidCode, theme]);
 
   // Initialize Panzoom when SVG changes
   useEffect(() => {

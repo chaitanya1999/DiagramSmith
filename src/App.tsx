@@ -12,7 +12,6 @@ import { useToasts } from './hooks/useToasts';
 import { useTheme } from './hooks/useTheme';
 import { useDiagramType } from './hooks/useDiagramType';
 import { loadLlmConfig, saveLlmConfig } from './services/storage';
-import { setMermaidTheme } from './services/mermaid';
 import type { LlmConfig, DiagramType } from './types';
 
 export default function App() {
@@ -43,11 +42,6 @@ export default function App() {
   } = useMermaid();
 
   const { isLoading, error: llmError, generate, clearError } = useLLM();
-
-  // Sync mermaid theme with app theme
-  useEffect(() => {
-    setMermaidTheme(theme);
-  }, [theme]);
 
   const handleToggleSplitView = useCallback(() => {
     setIsSplitView((prev) => !prev);
@@ -241,11 +235,11 @@ export default function App() {
             </Panel>
             <Separator className="bg-secondary" style={{ width: '4px', cursor: 'col-resize' }} />
             <Panel defaultSize={50} minSize={20}>
-              <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} />
+              <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} theme={theme} />
             </Panel>
           </Group>
         ) : (
-          <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} />
+          <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} theme={theme} />
         )}
       </div>
 
