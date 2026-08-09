@@ -10,7 +10,24 @@ export type DiagramType =
   | 'journey'
   | 'mindmap'
   | 'timeline'
-  | 'sankey';
+  | 'sankey'
+  | 'swimlane'
+  | 'quadrantChart'
+  | 'requirement'
+  | 'c4'
+  | 'xychart'
+  | 'block'
+  | 'packet'
+  | 'kanban'
+  | 'architecture'
+  | 'radar'
+  | 'eventmodeling'
+  | 'treemap'
+  | 'venn'
+  | 'ishikawa'
+  | 'wardley'
+  | 'cynefin'
+  | 'treeView';
 
 export type ThemeMode = 'dark' | 'light';
 
@@ -48,6 +65,23 @@ export const DIAGRAM_DISPLAY_NAMES: Record<DiagramType, string> = {
   mindmap: 'Mindmap',
   timeline: 'Timeline',
   sankey: 'Sankey',
+  swimlane: 'Swimlanes',
+  quadrantChart: 'Quadrant',
+  requirement: 'Requirement',
+  c4: 'C4',
+  xychart: 'XY Chart',
+  block: 'Block',
+  packet: 'Packet',
+  kanban: 'Kanban',
+  architecture: 'Architecture',
+  radar: 'Radar',
+  eventmodeling: 'Event Modeling',
+  treemap: 'Treemap',
+  venn: 'Venn',
+  ishikawa: 'Ishikawa',
+  wardley: 'Wardley',
+  cynefin: 'Cynefin',
+  treeView: 'TreeView',
 };
 
 export const DIAGRAM_ICONS: Record<DiagramType, string> = {
@@ -63,4 +97,21 @@ export const DIAGRAM_ICONS: Record<DiagramType, string> = {
   mindmap: '🧠',
   timeline: '📅',
   sankey: '🔀',
+  swimlane: '🏊',
+  quadrantChart: '🎯',
+  requirement: '📋',
+  c4: '🏗️',
+  xychart: '📈',
+  block: '🧱',
+  packet: '📦',
+  kanban: '📋',
+  architecture: '🏛️',
+  radar: '📡',
+  eventmodeling: '🕰️',
+  treemap: '🌳',
+  venn: '⭕',
+  ishikawa: '🐟',
+  wardley: '🗺️',
+  cynefin: '🌀',
+  treeView: '🌲',
 };

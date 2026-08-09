@@ -12,7 +12,7 @@ The Mermaid source code is the **single source of truth** — you can edit it ma
 - **📝 Text Summary** — Each diagram can have an accompanying text summary that improves LLM reasoning. The summary is editable and persists across sessions.
 - **🔀 Dual Output Mode** — LLM can generate both Mermaid syntax and a text summary simultaneously, improving multi-turn editing quality
 - **✏️ Manual Editing** — Full CodeMirror 6 editor with custom Mermaid syntax highlighting, real-time validation, and parse error display
-- **📊 12 Diagram Types** — Flowchart, Sequence, Class, State, ER, Gantt, Pie, Gitgraph, Journey, Mindmap, Timeline, Sankey
+- **📊 29 Diagram Types** — Flowchart, Sequence, Class, State, ER, Gantt, Pie, Gitgraph, Journey, Mindmap, Timeline, Sankey, Swimlanes, Quadrant, Requirement, C4, XY Chart, Block, Packet, Kanban, Architecture, Radar, Event Modeling, Treemap, Venn, Ishikawa, Wardley, Cynefin, TreeView
 - **🔀 Split View** — Side-by-side editor and rendered diagram with draggable resizable panels. Editor panel has a vertical split for Mermaid code + Text Summary.
 - **🔍 Pan & Zoom** — Scroll to zoom, click-and-drag to pan, with floating zoom controls including a zoom slider (30%–1000%, default 250%)
 - **🌙 Dark / Light Mode** — Toggleable theme persisted to localStorage
@@ -190,6 +190,23 @@ Both default to ON for optimal multi-turn editing quality.
 | Mindmap | 🧠 | Hierarchical mind maps |
 | Timeline | 📅 | Chronological timelines |
 | Sankey | 🔀 | Flow/sankey diagrams |
+| Swimlanes | 🏊 | Process flows divided by responsibility |
+| Quadrant | 🎯 | Quadrant/scatter charts |
+| Requirement | 📋 | Requirements and their relationships |
+| C4 | 🏗️ | C4 architecture diagrams |
+| XY Chart | 📈 | XY/bar/line charts |
+| Block | 🧱 | Block diagrams |
+| Packet | 📦 | Network packet layouts |
+| Kanban | 📋 | Kanban board visualization |
+| Architecture | 🏛️ | Architecture diagrams |
+| Radar | 📡 | Radar/spider charts |
+| Event Modeling | 🕰️ | Event modeling timelines |
+| Treemap | 🌳 | Hierarchical treemap charts |
+| Venn | ⭕ | Venn set diagrams |
+| Ishikawa | 🐟 | Fishbone/root-cause diagrams |
+| Wardley | 🗺️ | Wardley strategy maps |
+| Cynefin | 🌀 | Cynefin framework diagrams |
+| TreeView | 🌲 | Tree view hierarchies |
 
 ---
 
