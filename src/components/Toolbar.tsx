@@ -19,6 +19,7 @@ interface ToolbarProps {
     onImportMermaid: (content: string) => Promise<boolean>;
     onImportProject: (content: string) => Promise<boolean>;
     onToggleTheme: () => void;
+    onOpenHistory: () => void;
 }
 
 export function Toolbar({
@@ -36,6 +37,7 @@ export function Toolbar({
     onImportMermaid,
     onImportProject,
     onToggleTheme,
+    onOpenHistory,
 }: ToolbarProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showDiagramDropdown, setShowDiagramDropdown] = useState(false);
@@ -189,6 +191,14 @@ export function Toolbar({
             </Dropdown>
 
             <div className="ms-auto d-flex align-items-center gap-2">
+                <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={onOpenHistory}
+                    title="View last prompt and LLM response"
+                >
+                    🕘 History
+                </button>
+
                 <button
                     className="btn btn-sm btn-outline-secondary"
                     onClick={onToggleTheme}

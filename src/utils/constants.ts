@@ -1,4 +1,5 @@
 import type { LlmConfig, DiagramType } from '../types';
+import { DIAGRAM_SYNTAX_GUIDES } from './diagramSyntax';
 
 export const DEFAULT_DIAGRAM_TYPE: DiagramType = 'flowchart';
 
@@ -189,12 +190,15 @@ export const DEFAULT_TEMPLATES: Record<DiagramType, string> = {
     set Backend
     union Frontend,Backend["APIs"]`,
 	ishikawa: `ishikawa-beta
-    title "Root Cause Analysis"
-    effect "Product Defect"
-    cause "Materials" "Bad raw material"
-    cause "Methods" "Poor process"
-    cause "Machines" "Old equipment"
-    cause "People" "Lack of training"`,
+    Product Defect
+    Materials
+      Bad raw material
+    Methods
+      Poor process
+    Machines
+      Old equipment
+    People
+      Lack of training`,
 	wardley: `wardley-beta
 title Wardley Map
 	
@@ -235,9 +239,14 @@ clear --> chaotic : "Complacency"`,
         "index.html"`,
 };
 
-export const SYSTEM_PROMPT = `You are DiagramSmith, a Mermaid diagram editor. Your task is to modify the existing Mermaid diagram based on the user's instructions.
+export interface SystemPromptOptions {
+  includeSummary?: boolean;
+  generateSummary?: boolean;
+  includeSyntaxGuide?: boolean;
+  diagramType: DiagramType;
+}
 
-Rules:
+const BASE_RULES = `Rules:
 - The first line of the code is the diagram type declaration (e.g., flowchart TD, sequenceDiagram, classDiagram).
 - Do NOT change mermaid diagram type unless user explicitly asks to.
 - Modify the existing Mermaid diagram only.
@@ -246,83 +255,116 @@ Rules:
 - All node text must be enclosed in double quotes
 - Preserve formatting where practical.
 - Make the smallest possible changes to satisfy the request.
-- Return ONLY the Mermaid syntax.
 - Never use Markdown code fences.
 - Never explain the changes.
 - Never wrap the output in any formatting.
 - No spaces inside edge label pipes`;
 
-export const SYSTEM_PROMPT_WITH_SUMMARY = `You are DiagramSmith, a Mermaid diagram editor. Your task is to modify the existing Mermaid diagram based on the user's instructions.
+/**
+ * Composes the system prompt from a single base of rules plus conditional sections:
+ * - summary context (when includeSummary), output format (when generateSummary),
+ * - and a diagram-type-specific syntax reference (when includeSyntaxGuide).
+ * This eliminates the duplication between the old four static prompt variants.
+ */
+export function buildSystemPrompt(options: SystemPromptOptions): string {
+  const { includeSummary, generateSummary, includeSyntaxGuide, diagramType } = options;
+  const parts: string[] = [];
 
-Rules:
-- The first line of the code is the diagram type declaration (e.g., flowchart TD, sequenceDiagram, classDiagram).
-- Do NOT change mermaid diagram type unless user explicitly asks to.
-- Modify the existing Mermaid diagram only.
-- Node IDs must be alphanumeric with underscores without spaces
-- Preserve node identifiers whenever possible.
-- All node text must be enclosed in double quotes
-- Preserve formatting where practical.
-- Make the smallest possible changes to satisfy the request.
-- You will also receive a text summary of the diagram. Use it to better understand the diagram's purpose and meaning.
-- Return ONLY the Mermaid syntax.
-- Never use Markdown code fences.
-- Never explain the changes.
-- Never wrap the output in any formatting.
-- No spaces inside edge label pipes`;
-
-export const SYSTEM_PROMPT_GENERATE_SUMMARY = `You are DiagramSmith, a Mermaid diagram editor. Your task is to modify the existing Mermaid diagram based on the user's instructions, and also provide a text summary of the diagram.
+  const summaryAdj = includeSummary ? 'an updated' : 'a';
+  if (generateSummary) {
+    parts.push(
+      `You are DiagramSmith, a Mermaid diagram editor. Your task is to modify the existing Mermaid diagram based on the user's instructions, and also provide ${summaryAdj} text summary of the diagram.
 
 You MUST output TWO things separated by the delimiter "${SUMMARY_DELIMITER}":
 1. The updated Mermaid diagram code
-2. A plain text summary describing what the diagram represents, its key components, and the flow/logic it illustrates
+2. ${includeSummary ? 'An updated' : 'A plain'} text summary describing what the diagram represents, its key components, and the flow/logic it illustrates`
+    );
+  } else {
+    parts.push(
+      `You are DiagramSmith, a Mermaid diagram editor. Your task is to modify the existing Mermaid diagram based on the user's instructions.`
+    );
+  }
 
-Rules:
-- The first line of the code is the diagram type declaration (e.g., flowchart TD, sequenceDiagram, classDiagram).
-- Do NOT change mermaid diagram type unless user explicitly asks to.
-- Modify the existing Mermaid diagram only.
-- Node IDs must be alphanumeric with underscores without spaces
-- Preserve node identifiers whenever possible.
-- All node text must be enclosed in double quotes
-- Preserve formatting where practical.
-- Make the smallest possible changes to satisfy the request.
-- Never use Markdown code fences around the Mermaid syntax.
-- Never explain the changes outside the required format.
-- No spaces inside edge label pipes
+  if (includeSummary && !generateSummary) {
+    parts.push(
+      `You will also receive a text summary of the diagram. Use it to better understand the diagram's purpose and meaning.`
+    );
+  }
 
-Output format:
-[Mermaid diagram code]
-${SUMMARY_DELIMITER}
-[Text summary of the diagram]`;
-
-export const SYSTEM_PROMPT_GENERATE_SUMMARY_WITH_CONTEXT = `You are DiagramSmith, a Mermaid diagram editor. Your task is to modify the existing Mermaid diagram based on the user's instructions, and also provide an updated text summary of the diagram.
-
-You will receive:
+  if (includeSummary && generateSummary) {
+    parts.push(
+      `You will receive:
 - The current Mermaid diagram code
 - The current text summary of the diagram
 - The user's instruction
 
-You MUST output TWO things separated by the delimiter "${SUMMARY_DELIMITER}":
-1. The updated Mermaid diagram code
-2. An updated plain text summary describing what the diagram represents, its key components, and the flow/logic it illustrates
+Use the current text summary to better understand the diagram's purpose and meaning.`
+    );
+  }
 
-Rules:
-- The first line of the code is the diagram type declaration (e.g., flowchart TD, sequenceDiagram, classDiagram).
-- Do NOT change mermaid diagram type unless user explicitly asks to.
-- Modify the existing Mermaid diagram only.
-- Node IDs must be alphanumeric with underscores without spaces
-- Preserve node identifiers whenever possible.
-- All node text must be enclosed in double quotes
-- Preserve formatting where practical.
-- Make the smallest possible changes to satisfy the request.
-- Use the current text summary to better understand the diagram's purpose and meaning.
-- Never use Markdown code fences around the Mermaid syntax.
-- Never explain the changes outside the required format.
-- No spaces inside edge label pipes
+  if (includeSyntaxGuide) {
+    parts.push(
+      `The diagram is of type "${diagramType}". Use this syntax reference for that diagram type:
 
-Output format:
+${DIAGRAM_SYNTAX_GUIDES[diagramType]}`
+    );
+  }
+
+  parts.push(BASE_RULES);
+
+  if (generateSummary) {
+    parts.push(
+      `Output format:
 [Mermaid diagram code]
 ${SUMMARY_DELIMITER}
-[Updated text summary of the diagram]`;
+[${includeSummary ? 'Updated' : 'Text'} summary of the diagram]`
+    );
+  }
+
+  return parts.join('\n\n');
+}
+
+/**
+ * Composes the system prompt for ASK mode, where the LLM answers a question
+ * about the diagram without modifying it.
+ */
+export function buildAskSystemPrompt(options: {
+  includeSummary?: boolean;
+  includeSyntaxGuide?: boolean;
+  diagramType: DiagramType;
+}): string {
+  const { includeSummary, includeSyntaxGuide, diagramType } = options;
+  const parts: string[] = [];
+
+  parts.push(
+    `You are DiagramSmith, a Mermaid diagram assistant. Your task is to answer the user's question about the given Mermaid diagram. Do NOT modify the diagram. Do NOT output Mermaid code. Provide a clear, concise, and accurate answer based on the diagram content.`
+  );
+
+  if (includeSummary) {
+    parts.push(
+      `You will also receive a text summary of the diagram. Use it to better understand the diagram's purpose and meaning.`
+    );
+  }
+
+  if (includeSyntaxGuide) {
+    parts.push(
+      `The diagram is of type "${diagramType}". Use this syntax reference for that diagram type to help you interpret the diagram:
+ 
+${DIAGRAM_SYNTAX_GUIDES[diagramType]}`
+    );
+  }
+
+  parts.push(
+    `Rules:
+- Answer the user's question directly.
+- Base your answer only on the provided diagram and summary.
+- Do NOT modify or regenerate the diagram.
+- Do NOT use Markdown code fences.
+- Keep the answer concise and well-structured.`
+  );
+
+  return parts.join('\n\n');
+}
 
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
 	baseUrl: 'https://api.openai.com/v1',

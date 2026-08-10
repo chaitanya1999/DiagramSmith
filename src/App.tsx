@@ -6,13 +6,14 @@ import { DiagramView } from './components/DiagramView';
 import { MermaidEditor } from './components/MermaidEditor';
 import { PromptBar } from './components/PromptBar';
 import { SettingsDialog } from './components/SettingsDialog';
+import { PromptHistoryDialog } from './components/PromptHistoryDialog';
 import { useMermaid } from './hooks/useMermaid';
 import { useLLM } from './hooks/useLLM';
 import { useToasts } from './hooks/useToasts';
 import { useTheme } from './hooks/useTheme';
 import { useDiagramType } from './hooks/useDiagramType';
 import { loadLlmConfig, saveLlmConfig } from './services/storage';
-import type { LlmConfig, DiagramType } from './types';
+import type { LlmConfig, DiagramType, LlmMode, LlmInteraction } from './types';
 
 export default function App() {
   const [isSplitView, setIsSplitView] = useState(true);
@@ -20,7 +21,11 @@ export default function App() {
   const [llmConfig, setLlmConfig] = useState<LlmConfig>(() => loadLlmConfig());
   const [includeSummary, setIncludeSummary] = useState(true);
   const [generateSummary, setGenerateSummary] = useState(true);
+  const [includeSyntaxGuide, setIncludeSyntaxGuide] = useState(true);
   const [wordWrap, setWordWrap] = useState(true);
+  const [llmMode, setLlmMode] = useState<LlmMode>('action');
+  const [lastInteraction, setLastInteraction] = useState<LlmInteraction | null>(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const { toasts, addToast, removeToast } = useToasts();
   const { theme, toggleTheme, isDark } = useTheme();
@@ -41,7 +46,7 @@ export default function App() {
     setMermaidDirectly,
   } = useMermaid();
 
-  const { isLoading, error: llmError, generate, clearError } = useLLM();
+  const { isLoading, error: llmError, generate, ask, clearError } = useLLM();
 
   const handleToggleSplitView = useCallback(() => {
     setIsSplitView((prev) => !prev);
@@ -145,32 +150,81 @@ export default function App() {
         includeSummary: effectiveIncludeSummary,
         generateSummary: effectiveGenerateSummary,
         currentSummary: summary,
+        includeSyntaxGuide,
       });
 
       if (result === null) return;
+
+      // Record the interaction for the history popup
+      setLastInteraction({
+        mode: 'action',
+        prompt: instruction,
+        response: result.rawContent,
+        timestamp: Date.now(),
+      });
+
+      // The LLM output is always consumed into the editor (valid or not),
+      // so detect its diagram type regardless of validity to keep the toolbar in sync.
+      detectDiagramType(result.mermaid);
 
       if (effectiveGenerateSummary) {
         // LLM returned both mermaid and summary
         const valid = await updateFromLlmWithSummary(result.mermaid, result.summary || '');
         if (valid) {
-          detectDiagramType(result.mermaid);
           addToast('Diagram and summary updated successfully.', 'success');
         } else {
-          addToast('LLM returned invalid Mermaid. Your diagram was not modified.', 'danger');
+          addToast('LLM returned invalid Mermaid. The output was loaded into the editor — check the parse error and fix it.', 'danger');
         }
       } else {
         // LLM returned only mermaid
         const valid = await updateFromLlm(result.mermaid);
         if (valid) {
-          detectDiagramType(result.mermaid);
           addToast('Diagram updated successfully.', 'success');
         } else {
-          addToast('LLM returned invalid Mermaid. Your diagram was not modified.', 'danger');
+          addToast('LLM returned invalid Mermaid. The output was loaded into the editor — check the parse error and fix it.', 'danger');
         }
       }
     },
-    [currentMermaid, llmConfig, includeSummary, generateSummary, summary, generate, clearError, updateFromLlm, updateFromLlmWithSummary, addToast, detectDiagramType]
+    [currentMermaid, llmConfig, includeSummary, generateSummary, includeSyntaxGuide, summary, generate, clearError, updateFromLlm, updateFromLlmWithSummary, addToast, detectDiagramType]
   );
+
+  const handleAskSubmit = useCallback(
+    async (question: string) => {
+      if (!llmConfig.apiKey) {
+        addToast('Please configure your API key in Settings first.', 'danger');
+        return;
+      }
+      clearError();
+
+      const effectiveIncludeSummary = includeSummary && summary.length > 0;
+
+      const result = await ask(currentMermaid, question, llmConfig, {
+        includeSummary: effectiveIncludeSummary,
+        currentSummary: summary,
+        includeSyntaxGuide,
+      });
+
+      if (result === null) return;
+
+      // Record the interaction and auto-open the history popup to show the answer
+      setLastInteraction({
+        mode: 'ask',
+        prompt: question,
+        response: result.answer,
+        timestamp: Date.now(),
+      });
+      setIsHistoryOpen(true);
+    },
+    [currentMermaid, llmConfig, includeSummary, includeSyntaxGuide, summary, ask, clearError, addToast]
+  );
+
+  const handleOpenHistory = useCallback(() => {
+    setIsHistoryOpen(true);
+  }, []);
+
+  const handleCloseHistory = useCallback(() => {
+    setIsHistoryOpen(false);
+  }, []);
 
   // Show LLM errors as toasts
   useEffect(() => {
@@ -217,6 +271,7 @@ export default function App() {
         onToggleWordWrap={handleToggleWordWrap}
         onImportProject={handleImportProject}
         onToggleTheme={toggleTheme}
+        onOpenHistory={handleOpenHistory}
       />
 
       <div className="flex-grow-1 position-relative" style={{ minHeight: 0, backgroundColor: 'var(--app-bg)' }}>
@@ -235,23 +290,28 @@ export default function App() {
             </Panel>
             <Separator className="bg-secondary" style={{ width: '4px', cursor: 'col-resize' }} />
             <Panel defaultSize={50} minSize={20}>
-              <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} theme={theme} />
+              <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} isAskMode={llmMode === 'ask'} theme={theme} />
             </Panel>
           </Group>
         ) : (
-          <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} theme={theme} />
+          <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} isAskMode={llmMode === 'ask'} theme={theme} />
         )}
       </div>
 
       <PromptBar
-        onSubmit={handlePromptSubmit}
+        mode={llmMode}
+        onModeChange={setLlmMode}
+        onSubmit={llmMode === 'ask' ? handleAskSubmit : handlePromptSubmit}
         isLoading={isLoading}
         includeSummary={includeSummary}
         generateSummary={generateSummary}
+        includeSyntaxGuide={includeSyntaxGuide}
         onIncludeSummaryChange={setIncludeSummary}
         onGenerateSummaryChange={setGenerateSummary}
+        onIncludeSyntaxGuideChange={setIncludeSyntaxGuide}
       />
       <SettingsDialog show={isSettingsOpen} config={llmConfig} onSave={handleSaveSettings} onCancel={handleCancelSettings} />
+      <PromptHistoryDialog show={isHistoryOpen} interaction={lastInteraction} onClose={handleCloseHistory} />
 
       <ToastContainer position="top-end" className="p-3">
         {toasts.map((t) => (

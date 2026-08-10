@@ -503,6 +503,20 @@ textarea.form-control.border-0 {
 }
 
 /* ============================================
+   Prompt History Dialog
+   ============================================ */
+.interaction-block {
+  background-color: var(--editor-bg);
+  border: 1px solid var(--surface-border);
+  color: var(--app-text);
+  font-size: 0.85rem;
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ============================================
    Mermaid Editor Panel Header
    ============================================ */
 .editor-header {

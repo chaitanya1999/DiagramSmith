@@ -54,28 +54,36 @@ export function useMermaid(): UseMermaidReturn {
 
   const updateFromLlm = useCallback(async (value: string): Promise<boolean> => {
     const result = await validate(value);
+    // Always consume the LLM output into the editor so it is never lost,
+    // even when it is invalid (the parse error is displayed in the editor footer).
+    setEditorMermaid(value);
     if (result.valid) {
       setCurrentMermaid(value);
-      setEditorMermaid(value);
       lastValidRef.current = value;
       setParseError(null);
       setIsDiagramValid(true);
       return true;
     }
+    setParseError(result.error);
+    setIsDiagramValid(false);
     return false;
   }, []);
 
   const updateFromLlmWithSummary = useCallback(async (mermaid: string, newSummary: string): Promise<boolean> => {
     const result = await validate(mermaid);
+    // Always consume the LLM output into the editor so it is never lost,
+    // even when it is invalid (the parse error is displayed in the editor footer).
+    setEditorMermaid(mermaid);
     if (result.valid) {
       setCurrentMermaid(mermaid);
-      setEditorMermaid(mermaid);
       setSummary(newSummary);
       lastValidRef.current = mermaid;
       setParseError(null);
       setIsDiagramValid(true);
       return true;
     }
+    setParseError(result.error);
+    setIsDiagramValid(false);
     return false;
   }, []);
 

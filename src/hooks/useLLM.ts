@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
-import { editDiagram, LlmError } from '../services/llm';
+import { editDiagram, askDiagram, LlmError } from '../services/llm';
 import type { LlmConfig } from '../types';
-import type { EditDiagramResult } from '../services/llm';
+import type { EditDiagramResult, AskDiagramResult } from '../services/llm';
 
 interface UseLLMReturn {
   isLoading: boolean;
@@ -14,8 +14,19 @@ interface UseLLMReturn {
       includeSummary?: boolean;
       generateSummary?: boolean;
       currentSummary?: string;
+      includeSyntaxGuide?: boolean;
     }
   ) => Promise<EditDiagramResult | null>;
+  ask: (
+    currentMermaid: string,
+    question: string,
+    config: LlmConfig,
+    options?: {
+      includeSummary?: boolean;
+      currentSummary?: string;
+      includeSyntaxGuide?: boolean;
+    }
+  ) => Promise<AskDiagramResult | null>;
   clearError: () => void;
 }
 
@@ -32,6 +43,7 @@ export function useLLM(): UseLLMReturn {
         includeSummary?: boolean;
         generateSummary?: boolean;
         currentSummary?: string;
+        includeSyntaxGuide?: boolean;
       }
     ): Promise<EditDiagramResult | null> => {
       setIsLoading(true);
@@ -53,7 +65,37 @@ export function useLLM(): UseLLMReturn {
     []
   );
 
+  const ask = useCallback(
+    async (
+      currentMermaid: string,
+      question: string,
+      config: LlmConfig,
+      options?: {
+        includeSummary?: boolean;
+        currentSummary?: string;
+        includeSyntaxGuide?: boolean;
+      }
+    ): Promise<AskDiagramResult | null> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await askDiagram(currentMermaid, question, config, options);
+        return result;
+      } catch (e) {
+        if (e instanceof LlmError) {
+          setError(e.message);
+        } else {
+          setError('Unexpected error occurred.');
+        }
+        return null;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
+
   const clearError = useCallback(() => setError(null), []);
 
-  return { isLoading, error, generate, clearError };
+  return { isLoading, error, generate, ask, clearError };
 }

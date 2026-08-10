@@ -31,12 +31,21 @@ export type DiagramType =
 
 export type ThemeMode = 'dark' | 'light';
 
+export type LlmMode = 'action' | 'ask';
+
 export interface LlmConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
   temperature: number;
   maxTokens: number;
+}
+
+export interface LlmInteraction {
+  mode: LlmMode;
+  prompt: string;
+  response: string;
+  timestamp: number;
 }
 
 export interface DiagramState {

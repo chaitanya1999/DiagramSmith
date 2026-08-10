@@ -6,6 +6,7 @@ import type { ThemeMode } from '../types';
 interface DiagramViewProps {
   mermaidCode: string;
   isLoading?: boolean;
+  isAskMode?: boolean;
   theme: ThemeMode;
 }
 
@@ -13,7 +14,7 @@ const MIN_SCALE = 0.3;
 const MAX_SCALE = 10;
 const DEFAULT_SCALE = 2.5;
 
-export function DiagramView({ mermaidCode, isLoading, theme }: DiagramViewProps) {
+export function DiagramView({ mermaidCode, isLoading, isAskMode = false, theme }: DiagramViewProps) {
   const svgWrapperRef = useRef<HTMLDivElement>(null);
   const panzoomRef = useRef<ReturnType<typeof Panzoom> | null>(null);
   const [svg, setSvg] = useState<string | null>(null);
@@ -131,7 +132,7 @@ export function DiagramView({ mermaidCode, isLoading, theme }: DiagramViewProps)
       {isLoading && (
         <div className="position-absolute top-0 start-0 end-0 text-center py-2 loading-overlay" style={{ zIndex: 10 }}>
           <div className="spinner-border spinner-border-sm me-2" role="status" />
-          Generating diagram...
+          {isAskMode ? 'Asking....' : 'Generating diagram...'}
         </div>
       )}
 

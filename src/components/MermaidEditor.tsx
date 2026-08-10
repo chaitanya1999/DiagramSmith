@@ -162,8 +162,8 @@ export function MermaidEditor({ value, onChange, parseError, theme, wordWrap, su
         </Panel>
       </Group>
       {parseError && (
-        <div className="bg-danger bg-opacity-10 border-top border-danger px-3 py-1">
-          <small className="text-danger">{parseError}</small>
+        <div className="error-footer px-3 py-1">
+          <small className="text-danger fw-semibold">{parseError}</small>
         </div>
       )}
     </div>

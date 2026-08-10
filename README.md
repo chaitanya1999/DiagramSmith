@@ -9,8 +9,12 @@ The Mermaid source code is the **single source of truth** — you can edit it ma
 ## Features
 
 - **🤖 AI-Powered Editing** — Modify diagrams using natural language instructions via the floating prompt bar
+- **❓ Ask Mode** — Two LLM modes: **Action** (modify the diagram) and **Ask** (ask a question about the diagram without modifying it). Ask answers are shown in a popup.
+- **🕘 Interaction History** — One-click popup showing the last prompt and LLM response (or last question and answer in Ask mode)
 - **📝 Text Summary** — Each diagram can have an accompanying text summary that improves LLM reasoning. The summary is editable and persists across sessions.
 - **🔀 Dual Output Mode** — LLM can generate both Mermaid syntax and a text summary simultaneously, improving multi-turn editing quality
+- **📖 Syntax Guide** — Optionally injects a concise syntax reference for the current diagram type into the system prompt, helping LLMs generate valid syntax for less common diagram types
+- **🛡️ Consume Invalid Output** — Invalid LLM output is never discarded: it is loaded into the editor with the parse error shown, while the last valid diagram remains rendered
 - **✏️ Manual Editing** — Full CodeMirror 6 editor with custom Mermaid syntax highlighting, real-time validation, and parse error display
 - **📊 29 Diagram Types** — Flowchart, Sequence, Class, State, ER, Gantt, Pie, Gitgraph, Journey, Mindmap, Timeline, Sankey, Swimlanes, Quadrant, Requirement, C4, XY Chart, Block, Packet, Kanban, Architecture, Radar, Event Modeling, Treemap, Venn, Ishikawa, Wardley, Cynefin, TreeView
 - **🔀 Split View** — Side-by-side editor and rendered diagram with draggable resizable panels. Editor panel has a vertical split for Mermaid code + Text Summary.
@@ -51,19 +55,20 @@ src/
 ├── components/
 │   ├── DiagramView.tsx             # Mermaid SVG renderer + pan/zoom controls with slider
 │   ├── MermaidEditor.tsx           # CodeMirror 6 editor + resizable summary panel
-│   ├── PromptBar.tsx               # Floating bottom-center prompt with summary toggles
-│   ├── Toolbar.tsx                 # Top toolbar: split view, diagram type, import/export dropdown, theme, settings
-│   └── SettingsDialog.tsx          # LLM configuration modal (Base URL, API Key, Model, etc.)
+│   ├── PromptBar.tsx               # Floating bottom-center prompt with Action/Ask mode toggle + summary toggles
+│   ├── Toolbar.tsx                 # Top toolbar: split view, diagram type, import/export dropdown, theme, settings, history
+│   ├── SettingsDialog.tsx          # LLM configuration modal (Base URL, API Key, Model, etc.)
+│   └── PromptHistoryDialog.tsx     # Modal showing last prompt & LLM response (Action) or question & answer (Ask)
 │
 ├── hooks/
 │   ├── useMermaid.ts               # Diagram + summary state, validation, persistence, LLM/editor update flow
-│   ├── useLLM.ts                   # LLM generation: loading, error handling, API calls with summary options
+│   ├── useLLM.ts                   # LLM generation + ask: loading, error handling, API calls with summary options
 │   ├── useToasts.ts                # Toast notification state management
 │   ├── useTheme.ts                 # Dark/light mode state + localStorage persistence
 │   └── useDiagramType.ts           # Diagram type tracking + template switching
 │
 ├── services/
-│   ├── llm.ts                      # OpenAI-compatible chat completions API client (supports dual output)
+│   ├── llm.ts                      # OpenAI-compatible chat completions API client (editDiagram + askDiagram)
 │   ├── mermaid.ts                  # Mermaid parse/validate/render wrappers, theme initialization
 │   └── storage.ts                  # localStorage read/write helpers (mermaid + summary)
 │
@@ -71,7 +76,8 @@ src/
 │   └── index.ts                    # TypeScript types, DiagramDocument interface, display names/icons
 │
 └── utils/
-    ├── constants.ts                # Default templates, 4 system prompt variants, delimiter, storage keys, config
+    ├── constants.ts                # Default templates, dynamic system prompt builders (edit + ask), delimiter, storage keys, config
+    ├── diagramSyntax.ts            # Concise syntax reference guides for all 29 diagram types
     └── mermaidLanguage.ts          # Custom CodeMirror StreamLanguage for Mermaid syntax highlighting
 ```
 
@@ -81,6 +87,7 @@ src/
 App
 ├── Toolbar
 │   ├── Split View toggle
+│   ├── Word Wrap toggle (↩ Wrap / ↩ No Wrap)
 │   ├── Diagram Type dropdown (Bootstrap Dropdown)
 │   ├── Import button
 │   ├── Copy button
@@ -88,6 +95,7 @@ App
 │   │   ├── Export .mmd
 │   │   └── Export Project (.dsmith.json)
 │   ├── Theme toggle (🌙/☀️)
+│   ├── History button (🕘)
 │   └── Settings button (⚙️)
 ├── [Split View]
 │   ├── MermaidEditor (left panel)
@@ -100,18 +108,25 @@ App
 ├── [Diagram View]
 │   └── DiagramView (full screen)
 ├── PromptBar (floating, collapsible)
-│   ├── Textarea for instructions
+│   ├── Action / Ask mode toggle
+│   ├── Textarea for instructions / questions
 │   ├── "Include Summary" toggle
-│   ├── "LLM Generate Summary" toggle
-│   └── Generate / Cancel buttons
-└── SettingsDialog (modal)
+│   ├── "LLM Generate Summary" toggle (Action mode only)
+│   ├── "Include Syntax Guide" toggle
+│   └── Generate / Ask / Cancel buttons
+├── SettingsDialog (modal)
+└── PromptHistoryDialog (modal)
+    ├── Mode badge (✏️ Action / ❓ Ask)
+    ├── Prompt / Question
+    └── LLM Response / Answer
 ```
 
 ### Data Flow
 
-1. **LLM Flow**: PromptBar → `useLLM.generate()` → `services/llm.editDiagram()` → OpenAI API → validate → update state (mermaid + optional summary) → re-render
-2. **Manual Edit Flow**: CodeMirror onChange → debounce (400ms) → `services/mermaid.validate()` → if valid: update state & render; if invalid: show parse error
-3. **Diagram Type Change**: Toolbar dropdown → `changeDiagramType(type)` → `setMermaidDirectly(template)` → immediate state update (no validation needed for known-good templates)
+1. **LLM Flow (Action)**: PromptBar → `useLLM.generate()` → `services/llm.editDiagram()` → OpenAI API → validate → update state (mermaid + optional summary) → re-render
+2. **LLM Flow (Ask)**: PromptBar → `useLLM.ask()` → `services/llm.askDiagram()` → OpenAI API → record interaction → auto-open PromptHistoryDialog with the answer
+3. **Manual Edit Flow**: CodeMirror onChange → debounce (400ms) → `services/mermaid.validate()` → if valid: update state & render; if invalid: show parse error
+4. **Diagram Type Change**: Toolbar dropdown → `changeDiagramType(type)` → `setMermaidDirectly(template)` → immediate state update (no validation needed for known-good templates)
 
 ---
 
@@ -165,14 +180,15 @@ npm run lint
 
 ### Prompt Options
 
-When the prompt bar is expanded, two toggle switches are available:
+When the prompt bar is expanded, three toggle switches are available:
 
 | Option | Description |
 |--------|-------------|
 | **Include Summary** | When ON, the current text summary is included in the LLM prompt to improve context and reasoning |
 | **LLM Generate Summary** | When ON, the LLM outputs both updated Mermaid syntax and an updated text summary (separated by a delimiter) |
+| **Include Syntax Guide** | When ON, a concise syntax reference for the current diagram type is injected into the system prompt to help the LLM generate valid syntax |
 
-Both default to ON for optimal multi-turn editing quality.
+All three default to ON for optimal multi-turn editing quality.
 
 ### Diagram Types
 
@@ -222,12 +238,12 @@ Both default to ON for optimal multi-turn editing quality.
 
 ## System Prompt
 
-The LLM uses one of four system prompts depending on the toggle settings:
+The system prompt is composed dynamically from a single base of rules plus conditional sections, eliminating redundancy:
 
-- **Base** — Standard incremental editing (no summary involvement)
-- **With Summary Context** — Includes summary in the prompt for better understanding
-- **Generate Summary** — Instructs LLM to output both Mermaid code and a text summary separated by `---==DIAGRAMSMITH_SUMMARY_BOUNDARY==---`
-- **Generate Summary With Context** — Combines both: receives current summary, uses it for context, and outputs updated Mermaid + updated summary
+- **Base rules** — Always included (modify existing diagram only, preserve node identifiers, smallest changes, no code fences, etc.)
+- **Summary context** — Added when *Include Summary* is ON
+- **Dual output format** — Added when *LLM Generate Summary* is ON (outputs Mermaid + summary separated by `---==DIAGRAMSMITH_SUMMARY_BOUNDARY==---`)
+- **Syntax guide** — Added when *Include Syntax Guide* is ON; a concise syntax reference for the current diagram type is injected so the LLM produces valid syntax
 
 All variants enforce:
 - Modify the existing diagram only
@@ -255,33 +271,11 @@ All variants enforce:
 |----------|----------|
 | Invalid API key | Toast error: "Invalid API key" |
 | Network timeout | Toast error after 30s |
-| LLM returns invalid Mermaid | Previous diagram preserved, toast error |
+| LLM returns invalid Mermaid | Output is loaded into the editor with the parse error shown; the last valid diagram remains rendered, toast error |
 | Malformed LLM response | Code fences stripped automatically; dual output parsed via delimiter |
 | Empty LLM response | Toast error |
 | Mermaid parse error in editor | Error shown in editor footer |
 | Mermaid render failure | "⚠ Render Error" displayed in diagram panel |
-
----
-
-## Project Budget
-
-All source files are kept under **500 lines** to maintain cognitive complexity:
-
-| File | Lines |
-|------|-------|
-| App.tsx | ~266 |
-| constants.ts | ~227 |
-| DiagramView.tsx | ~162 |
-| MermaidEditor.tsx | ~163 |
-| Toolbar.tsx | ~181 |
-| PromptBar.tsx | ~97 |
-| SettingsDialog.tsx | ~119 |
-| useMermaid.ts | ~101 |
-| useLLM.ts | ~40 |
-| useToasts.ts | ~24 |
-| useTheme.ts | ~33 |
-| useDiagramType.ts | ~33 |
-| mermaidLanguage.ts | ~72 |
 
 ---
 
