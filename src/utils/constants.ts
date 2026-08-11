@@ -382,7 +382,7 @@ export const STORAGE_KEYS = {
 	SUMMARY: 'diagramsmith-summary',
 };
 
-export const REQUEST_TIMEOUT_MS = 30000;
+export const REQUEST_TIMEOUT_MS = 300000;
 
 export const ALL_DIAGRAM_TYPES: DiagramType[] = [
 	'flowchart',

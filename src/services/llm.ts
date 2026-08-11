@@ -4,7 +4,6 @@ import {
   buildAskSystemPrompt,
   getDiagramType,
   SUMMARY_DELIMITER,
-  REQUEST_TIMEOUT_MS,
 } from '../utils/constants';
 
 export type LlmErrorCode = 'invalid_key' | 'timeout' | 'malformed_response' | 'network_error' | 'unsupported_model';
@@ -61,11 +60,9 @@ export async function editDiagram(
     generateSummary?: boolean;
     currentSummary?: string;
     includeSyntaxGuide?: boolean;
+    signal?: AbortSignal;
   }
 ): Promise<EditDiagramResult> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
   // Compose system prompt dynamically (single source of truth)
   const systemPrompt = buildSystemPrompt({
     includeSummary: options?.includeSummary,
@@ -98,7 +95,7 @@ export async function editDiagram(
         'Authorization': `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify(requestBody),
-      signal: controller.signal,
+      signal: options?.signal,
     });
 
     if (response.status === 401) {
@@ -136,7 +133,7 @@ export async function editDiagram(
   } catch (e: unknown) {
     if (e instanceof LlmError) throw e;
     if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new LlmError('Request timed out. Please check your API endpoint and try again.', 'timeout');
+      throw new LlmError('Request cancelled.', 'timeout');
     }
     if (e instanceof TypeError && e.message.includes('fetch')) {
       throw new LlmError(
@@ -148,8 +145,6 @@ export async function editDiagram(
       `Unexpected error: ${e instanceof Error ? e.message : 'Unknown error'}`,
       'network_error'
     );
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
@@ -201,11 +196,9 @@ export async function askDiagram(
     includeSummary?: boolean;
     currentSummary?: string;
     includeSyntaxGuide?: boolean;
+    signal?: AbortSignal;
   }
 ): Promise<AskDiagramResult> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
   // Compose ASK-mode system prompt
   const systemPrompt = buildAskSystemPrompt({
     includeSummary: options?.includeSummary,
@@ -237,7 +230,7 @@ export async function askDiagram(
         'Authorization': `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify(requestBody),
-      signal: controller.signal,
+      signal: options?.signal,
     });
 
     if (response.status === 401) {
@@ -263,7 +256,7 @@ export async function askDiagram(
   } catch (e: unknown) {
     if (e instanceof LlmError) throw e;
     if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new LlmError('Request timed out. Please check your API endpoint and try again.', 'timeout');
+      throw new LlmError('Request cancelled.', 'timeout');
     }
     if (e instanceof TypeError && e.message.includes('fetch')) {
       throw new LlmError(
@@ -275,7 +268,5 @@ export async function askDiagram(
       `Unexpected error: ${e instanceof Error ? e.message : 'Unknown error'}`,
       'network_error'
     );
-  } finally {
-    clearTimeout(timeoutId);
   }
 }

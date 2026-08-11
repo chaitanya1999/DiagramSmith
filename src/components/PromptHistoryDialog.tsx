@@ -16,9 +16,9 @@ export function PromptHistoryDialog({ show, interaction, onClose }: PromptHistor
         <Modal.Title>
           {interaction ? (
             isActionMode ? (
-              '✏️ Last Prompt & LLM Response (Action)'
+              '✏️ Last LLM Interaction (Action)'
             ) : (
-              '❓ Last Question & LLM Answer (Ask)'
+              '❓ Last LLM Interaction (Ask)'
             )
           ) : (
             'LLM Interaction History'

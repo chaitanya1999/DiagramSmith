@@ -46,7 +46,7 @@ export default function App() {
     setMermaidDirectly,
   } = useMermaid();
 
-  const { isLoading, error: llmError, generate, ask, clearError } = useLLM();
+  const { isLoading, error: llmError, generate, ask, clearError, abort } = useLLM();
 
   const handleToggleSplitView = useCallback(() => {
     setIsSplitView((prev) => !prev);
@@ -290,11 +290,11 @@ export default function App() {
             </Panel>
             <Separator className="bg-secondary" style={{ width: '4px', cursor: 'col-resize' }} />
             <Panel defaultSize={50} minSize={20}>
-              <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} isAskMode={llmMode === 'ask'} theme={theme} />
+              <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} isAskMode={llmMode === 'ask'} theme={theme} onAbort={abort} />
             </Panel>
           </Group>
         ) : (
-          <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} isAskMode={llmMode === 'ask'} theme={theme} />
+          <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} isAskMode={llmMode === 'ask'} theme={theme} onAbort={abort} />
         )}
       </div>
 
@@ -309,6 +309,7 @@ export default function App() {
         onIncludeSummaryChange={setIncludeSummary}
         onGenerateSummaryChange={setGenerateSummary}
         onIncludeSyntaxGuideChange={setIncludeSyntaxGuide}
+        onAbort={abort}
       />
       <SettingsDialog show={isSettingsOpen} config={llmConfig} onSave={handleSaveSettings} onCancel={handleCancelSettings} />
       <PromptHistoryDialog show={isHistoryOpen} interaction={lastInteraction} onClose={handleCloseHistory} />

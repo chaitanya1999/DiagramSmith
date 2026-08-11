@@ -4,187 +4,207 @@ import { render, setMermaidTheme } from '../services/mermaid';
 import type { ThemeMode } from '../types';
 
 interface DiagramViewProps {
-  mermaidCode: string;
-  isLoading?: boolean;
-  isAskMode?: boolean;
-  theme: ThemeMode;
+	mermaidCode: string;
+	isLoading?: boolean;
+	isAskMode?: boolean;
+	theme: ThemeMode;
+	onAbort?: () => void;
 }
 
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 10;
 const DEFAULT_SCALE = 2.5;
 
-export function DiagramView({ mermaidCode, isLoading, isAskMode = false, theme }: DiagramViewProps) {
-  const svgWrapperRef = useRef<HTMLDivElement>(null);
-  const panzoomRef = useRef<ReturnType<typeof Panzoom> | null>(null);
-  const [svg, setSvg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [scale, setScale] = useState(DEFAULT_SCALE);
-  const renderIdRef = useRef(0);
-
-  // Render SVG from mermaid code
-  useEffect(() => {
-    let cancelled = false;
-    setError(null);
-
-    // Apply theme before rendering so the diagram colors match the app theme
-    setMermaidTheme(theme);
-
-    render(mermaidCode, `diagram-${++renderIdRef.current}`)
-      .then((result) => {
-        if (!cancelled) {
-          setSvg(result);
-        }
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          const message = e instanceof Error ? e.message : 'Failed to render diagram';
-          setError(message);
-          setSvg(null);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mermaidCode, theme]);
-
-  // Initialize Panzoom when SVG changes
-  useEffect(() => {
-    if (!svgWrapperRef.current || !svg) return;
-
-    // Destroy previous instance
-    if (panzoomRef.current) {
-      panzoomRef.current.destroy();
-      panzoomRef.current = null;
-    }
-
-    const elem = svgWrapperRef.current;
-
-    const panzoom = Panzoom(elem, {
-      maxScale: MAX_SCALE,
-      minScale: MIN_SCALE,
-      step: 0.1,
-      startScale: DEFAULT_SCALE,
-      startX: 0,
-      startY: 0,
-      canvas: false,
-      pinchAndPan: true,
-    });
-
-    panzoomRef.current = panzoom;
-    setScale(panzoom.getScale());
-
-    // Wheel zoom (no modifier key needed)
-    const wheelHandler = (e: WheelEvent) => {
-      e.preventDefault();
-      panzoom.zoomWithWheel(e);
-      setScale(panzoom.getScale());
-    };
-
-    // Attach to the parent so the entire diagram area responds
-    const parent = elem.parentElement;
-    if (parent) {
-      parent.addEventListener('wheel', wheelHandler, { passive: false });
-    }
-
-    return () => {
-      if (parent) {
-        parent.removeEventListener('wheel', wheelHandler);
-      }
-      panzoom.destroy();
-      panzoomRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [svg]);
-
-  const handleZoomIn = useCallback(() => {
-    if (panzoomRef.current) {
-      panzoomRef.current.zoomIn();
-      setScale(panzoomRef.current.getScale());
-    }
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    if (panzoomRef.current) {
-      panzoomRef.current.zoomOut();
-      setScale(panzoomRef.current.getScale());
-    }
-  }, []);
-
-  const handleReset = useCallback(() => {
-    if (panzoomRef.current) {
-      panzoomRef.current.reset({ animate: true });
-      setScale(panzoomRef.current.getScale());
-    }
-  }, []);
-
-  const handleSliderChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newScale = parseFloat(e.target.value) / 100;
-    if (panzoomRef.current) {
-      panzoomRef.current.zoom(newScale);
-      setScale(panzoomRef.current.getScale());
-    }
-  }, []);
-
-  return (
-    <div className="diagram-view h-100 position-relative" style={{ overflow: 'hidden' }}>
-      {isLoading && (
-        <div className="position-absolute top-0 start-0 end-0 text-center py-2 loading-overlay" style={{ zIndex: 10 }}>
-          <div className="spinner-border spinner-border-sm me-2" role="status" />
-          {isAskMode ? 'Asking....' : 'Generating diagram...'}
-        </div>
-      )}
-
-      {/* Zoom controls overlay */}
-      {svg && (
-        <div className="position-absolute top-0 end-0 m-2 d-flex flex-column align-items-center gap-1 zoom-controls" style={{ zIndex: 5 }}>
-          <button className="btn btn-sm btn-outline-secondary border-0 zoom-btn" onClick={handleZoomIn} title="Zoom in">
-            <strong>+</strong>
-          </button>
-          <input
-            type="range"
-            className="form-range zoom-slider"
-            min={MIN_SCALE * 100}
-            max={MAX_SCALE * 100}
-            step={5}
-            value={Math.round(scale * 100)}
-            onChange={handleSliderChange}
-            title={`Zoom: ${Math.round(scale * 100)}%`}
-          />
-          <button className="btn btn-sm btn-outline-secondary border-0 zoom-btn" onClick={handleZoomOut} title="Zoom out">
-            <strong>−</strong>
-          </button>
-          <button className="btn btn-sm btn-outline-secondary border-0 zoom-btn" onClick={handleReset} title="Reset zoom to 250%">
-            ⟲
-          </button>
-          <span className="text-center small zoom-label rounded px-1 fw-bold">
-            {Math.round(scale * 100)}%
-          </span>
-        </div>
-      )}
-
-      {error ? (
-        <div className="text-danger text-center p-4">
-          <p className="mb-2">⚠ Render Error</p>
-          <p className="small mb-0">{error}</p>
-        </div>
-      ) : svg ? (
-        <div
-          className="w-100 h-100 d-flex align-items-center justify-content-center"
-          style={{ cursor: 'grab', touchAction: 'none' }}
-        >
-          <div
-            ref={svgWrapperRef}
-            style={{ display: 'inline-block' }}
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
-        </div>
-      ) : (
-        <div className="d-flex align-items-center justify-content-center h-100 text-muted">
-          <div className="spinner-border" role="status" />
-        </div>
-      )}
-    </div>
-  );
+export function DiagramView({ mermaidCode, isLoading, isAskMode = false, theme, onAbort }: DiagramViewProps) {
+	const svgWrapperRef = useRef<HTMLDivElement>(null);
+	const panzoomRef = useRef<ReturnType<typeof Panzoom> | null>(null);
+	const [svg, setSvg] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [scale, setScale] = useState(DEFAULT_SCALE);
+	const renderIdRef = useRef(0);
+	
+	// Render SVG from mermaid code
+	useEffect(() => {
+		let cancelled = false;
+		setError(null);
+		
+		// Apply theme before rendering so the diagram colors match the app theme
+		setMermaidTheme(theme);
+		
+		render(mermaidCode, `diagram-${++renderIdRef.current}`)
+		.then((result) => {
+			if (!cancelled) {
+				setSvg(result);
+			}
+		})
+		.catch((e: unknown) => {
+			if (!cancelled) {
+				const message = e instanceof Error ? e.message : 'Failed to render diagram';
+				setError(message);
+				setSvg(null);
+			}
+		});
+		
+		return () => {
+			cancelled = true;
+		};
+	}, [mermaidCode, theme]);
+	
+	// Initialize Panzoom when SVG changes
+	useEffect(() => {
+		if (!svgWrapperRef.current || !svg) return;
+		
+		// Destroy previous instance
+		if (panzoomRef.current) {
+			panzoomRef.current.destroy();
+			panzoomRef.current = null;
+		}
+		
+		const elem = svgWrapperRef.current;
+		
+		const panzoom = Panzoom(elem, {
+			maxScale: MAX_SCALE,
+			minScale: MIN_SCALE,
+			step: 0.1,
+			startScale: DEFAULT_SCALE,
+			startX: 0,
+			startY: 0,
+			canvas: false,
+			pinchAndPan: true,
+		});
+		
+		panzoomRef.current = panzoom;
+		setScale(panzoom.getScale());
+		
+		const wheelHandler = (e: WheelEvent) => {
+			e.preventDefault();
+			const direction = Math.sign(e.deltaY); // -1 = scroll up (zoom in), +1 = scroll down (zoom out)
+			const currentScale = panzoom.getScale();
+			const factor = 1 + (direction > 0 ? -0.1 : 0.1); // ~10% per tick
+			const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, currentScale * factor));
+			panzoom.zoom(newScale);  // zooms toward center (no pointer option set)
+			setScale(panzoom.getScale());
+		};
+		
+		// Attach to the parent so the entire diagram area responds
+		const parent = elem.parentElement;
+		if (parent) {
+			parent.addEventListener('wheel', wheelHandler, { passive: false });
+		}
+		
+		return () => {
+			if (parent) {
+				parent.removeEventListener('wheel', wheelHandler);
+			}
+			panzoom.destroy();
+			panzoomRef.current = null;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [svg]);
+	
+	const handleZoomIn = useCallback(() => {
+		if (panzoomRef.current) {
+			panzoomRef.current.zoomIn();
+			setScale(panzoomRef.current.getScale());
+		}
+	}, []);
+	
+	const handleZoomOut = useCallback(() => {
+		if (panzoomRef.current) {
+			panzoomRef.current.zoomOut();
+			setScale(panzoomRef.current.getScale());
+		}
+	}, []);
+	
+	const handleReset = useCallback(() => {
+		if (panzoomRef.current) {
+			panzoomRef.current.reset({ animate: true });
+			setScale(panzoomRef.current.getScale());
+		}
+	}, []);
+	
+	const handleSliderChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+		const newScale = parseFloat(e.target.value) / 100;
+		if (panzoomRef.current) {
+			panzoomRef.current.zoom(newScale);
+			setScale(panzoomRef.current.getScale());
+		}
+	}, []);
+	
+	return (
+		<div className="diagram-view h-100 position-relative" style={{ overflow: 'hidden' }}>
+		{isLoading && (
+			<div className="position-absolute top-0 start-0 end-0 loading-overlay d-flex justify-content-between align-items-center px-3 py-2" style={{ zIndex: 10 }}>
+			<div className="d-flex align-items-center">
+			<div className="spinner-border spinner-border-sm me-2" role="status" />
+			<span className="fw-semibold">{isAskMode ? 'Asking...' : 'Generating Diagram'}</span>
+			</div>
+			{onAbort && (
+				<button
+				type="button"
+				className="btn btn-sm btn-outline-danger border-0 p-1 lh-1"
+				onClick={onAbort}
+				title="Stop"
+				aria-label="Stop"
+				style={{ width: '28px', height: '28px' }}
+				>
+				<svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+				<rect x="1" y="1" width="12" height="12" rx="1" />
+				</svg>
+				</button>
+			)}
+			</div>
+		)}
+		
+		{/* Zoom controls overlay */}
+		{svg && (
+			<div className="position-absolute top-0 end-0 m-2 d-flex flex-column align-items-center gap-1 zoom-controls" style={{ zIndex: 5 }}>
+			<button className="btn btn-sm btn-outline-secondary border-0 zoom-btn" onClick={handleZoomIn} title="Zoom in">
+			<strong>+</strong>
+			</button>
+			<input
+			type="range"
+			className="form-range zoom-slider"
+			min={MIN_SCALE * 100}
+			max={MAX_SCALE * 100}
+			step={5}
+			value={Math.round(scale * 100)}
+			onChange={handleSliderChange}
+			title={`Zoom: ${Math.round(scale * 100)}%`}
+			/>
+			<button className="btn btn-sm btn-outline-secondary border-0 zoom-btn" onClick={handleZoomOut} title="Zoom out">
+			<strong>−</strong>
+			</button>
+			<button className="btn btn-sm btn-outline-secondary border-0 zoom-btn" onClick={handleReset} title="Reset zoom to 250%">
+			⟲
+			</button>
+			<span className="text-center small zoom-label rounded px-1 fw-bold">
+			{Math.round(scale * 100)}%
+			</span>
+			</div>
+		)}
+		
+		{error ? (
+			<div className="text-danger text-center p-4">
+			<p className="mb-2">⚠ Render Error</p>
+			<p className="small mb-0">{error}</p>
+			</div>
+		) : svg ? (
+			<div
+			className="w-100 h-100 d-flex align-items-center justify-content-center"
+			style={{ cursor: 'grab', touchAction: 'none' }}
+			>
+			<div
+			ref={svgWrapperRef}
+			style={{ display: 'inline-block' }}
+			dangerouslySetInnerHTML={{ __html: svg }}
+			/>
+			</div>
+		) : (
+			<div className="d-flex align-items-center justify-content-center h-100 text-muted">
+			<div className="spinner-border" role="status" />
+			</div>
+		)}
+		</div>
+	);
 }

@@ -18,7 +18,9 @@ The Mermaid source code is the **single source of truth** — you can edit it ma
 - **✏️ Manual Editing** — Full CodeMirror 6 editor with custom Mermaid syntax highlighting, real-time validation, and parse error display
 - **📊 29 Diagram Types** — Flowchart, Sequence, Class, State, ER, Gantt, Pie, Gitgraph, Journey, Mindmap, Timeline, Sankey, Swimlanes, Quadrant, Requirement, C4, XY Chart, Block, Packet, Kanban, Architecture, Radar, Event Modeling, Treemap, Venn, Ishikawa, Wardley, Cynefin, TreeView
 - **🔀 Split View** — Side-by-side editor and rendered diagram with draggable resizable panels. Editor panel has a vertical split for Mermaid code + Text Summary.
-- **🔍 Pan & Zoom** — Scroll to zoom, click-and-drag to pan, with floating zoom controls including a zoom slider (30%–1000%, default 250%)
+- **🔍 Pan & Zoom** — Scroll to zoom (from viewport center), click-and-drag to pan, with floating zoom controls including a zoom slider (30%–1000%, default 250%)
+- **🛑 Abortable Generation** — A stop button (⏹) appears in the diagram loading overlay during LLM requests; clicking it cancels the API call immediately. The Cancel button in the prompt bar also aborts the request.
+- **⬆️ Recall Last Prompt** — Press the Up Arrow key (↑) on an empty prompt input to pre-fill it with the last submitted prompt
 - **🌙 Dark / Light Mode** — Toggleable theme persisted to localStorage
 - **⚙️ Bring Your Own Key** — Connect to any OpenAI-compatible LLM endpoint
 - **💾 Local Persistence** — Diagram code, text summary, and LLM config saved automatically to localStorage
@@ -231,7 +233,8 @@ All three default to ON for optimal multi-turn editing quality.
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl` + `Enter` | Submit AI prompt |
-| Scroll wheel | Zoom in/out (diagram view) |
+| `↑` (Arrow Up) | Recall last prompt (when input is empty) |
+| Scroll wheel | Zoom in/out (diagram view, from viewport center) |
 | Click + drag | Pan diagram |
 
 ---
@@ -269,6 +272,7 @@ All variants enforce:
 
 | Scenario | Behavior |
 |----------|----------|
+| Request cancelled | Loading overlay removed immediately; no toast shown |
 | Invalid API key | Toast error: "Invalid API key" |
 | Network timeout | Toast error after 30s |
 | LLM returns invalid Mermaid | Output is loaded into the editor with the parse error shown; the last valid diagram remains rendered, toast error |

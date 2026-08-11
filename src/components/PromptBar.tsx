@@ -12,6 +12,7 @@ interface PromptBarProps {
   onIncludeSummaryChange: (value: boolean) => void;
   onGenerateSummaryChange: (value: boolean) => void;
   onIncludeSyntaxGuideChange: (value: boolean) => void;
+  onAbort?: () => void;
 }
 
 export function PromptBar({
@@ -25,16 +26,19 @@ export function PromptBar({
   onIncludeSummaryChange,
   onGenerateSummaryChange,
   onIncludeSyntaxGuideChange,
+  onAbort,
 }: PromptBarProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [instruction, setInstruction] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastPromptRef = useRef('');
 
   const isAskMode = mode === 'ask';
 
   const handleSubmit = useCallback(() => {
     const trimmed = instruction.trim();
     if (!trimmed || isLoading) return;
+    lastPromptRef.current = trimmed;
     onSubmit(trimmed);
     setInstruction('');
     setIsExpanded(false);
@@ -45,15 +49,21 @@ export function PromptBar({
       if (e.ctrlKey && e.key === 'Enter') {
         e.preventDefault();
         handleSubmit();
+        return;
+      }
+      if (e.key === 'ArrowUp' && instruction.trim() === '' && lastPromptRef.current) {
+        e.preventDefault();
+        setInstruction(lastPromptRef.current);
       }
     },
-    [handleSubmit]
+    [handleSubmit, instruction]
   );
 
   const handleCancel = useCallback(() => {
     setInstruction('');
     setIsExpanded(false);
-  }, []);
+    onAbort?.();
+  }, [onAbort]);
 
   // Focus textarea when expanded
   useEffect(() => {
