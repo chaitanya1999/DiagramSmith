@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { LlmConfig } from '../types';
 import { Modal, Button, Form } from 'react-bootstrap';
+import { loadMaxSnapshots, saveMaxSnapshots } from '../services/storage';
 
 interface SettingsDialogProps {
   show: boolean;
@@ -15,6 +16,7 @@ export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialo
   const [model, setModel] = useState(config.model);
   const [temperature, setTemperature] = useState(config.temperature.toString());
   const [maxTokens, setMaxTokens] = useState(config.maxTokens.toString());
+  const [maxSnapshots, setMaxSnapshots] = useState(() => loadMaxSnapshots().toString());
 
   useEffect(() => {
     setBaseUrl(config.baseUrl);
@@ -22,11 +24,17 @@ export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialo
     setModel(config.model);
     setTemperature(config.temperature.toString());
     setMaxTokens(config.maxTokens.toString());
+    setMaxSnapshots(loadMaxSnapshots().toString());
   }, [config, show]);
 
   const handleSave = () => {
     const temp = parseFloat(temperature);
     const tokens = parseInt(maxTokens, 10);
+    const snapshots = parseInt(maxSnapshots, 10);
+
+    if (!isNaN(snapshots) && snapshots >= 1 && snapshots <= 50) {
+      saveMaxSnapshots(snapshots);
+    }
 
     onSave({
       baseUrl: baseUrl.trim(),
@@ -40,10 +48,12 @@ export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialo
   return (
     <Modal show={show} onHide={onCancel} centered>
       <Modal.Header closeButton>
-        <Modal.Title>⚙️ LLM Settings</Modal.Title>
+        <Modal.Title>⚙️ Settings</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <Form>
+          <h6 className="mb-3 text-muted">LLM Configuration</h6>
+
           <Form.Group className="mb-3">
             <Form.Label>Base URL</Form.Label>
             <Form.Control
@@ -94,16 +104,22 @@ export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialo
             </Form.Text>
           </Form.Group>
 
-          {/* <Form.Group className="mb-3">
-            <Form.Label>Maximum Tokens</Form.Label>
-            <Form.Control
-              type="number"
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(e.target.value)}
-              min={1}
-              max={16384}
+          <hr />
+          <h6 className="mb-3 text-muted">Version History</h6>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Max Snapshots ({maxSnapshots})</Form.Label>
+            <Form.Range
+              min="1"
+              max="50"
+              step="1"
+              value={maxSnapshots}
+              onChange={(e) => setMaxSnapshots(e.target.value)}
             />
-          </Form.Group> */}
+            <Form.Text className="text-muted">
+              Maximum number of versions to keep in history (1–50). Oldest are dropped when exceeded.
+            </Form.Text>
+          </Form.Group>
         </Form>
       </Modal.Body>
       <Modal.Footer>

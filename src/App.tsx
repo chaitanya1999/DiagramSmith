@@ -7,11 +7,13 @@ import { MermaidEditor } from './components/MermaidEditor';
 import { PromptBar } from './components/PromptBar';
 import { SettingsDialog } from './components/SettingsDialog';
 import { PromptHistoryDialog } from './components/PromptHistoryDialog';
+import { VersionHistoryDialog } from './components/VersionHistoryDialog';
 import { useMermaid } from './hooks/useMermaid';
 import { useLLM } from './hooks/useLLM';
 import { useToasts } from './hooks/useToasts';
 import { useTheme } from './hooks/useTheme';
 import { useDiagramType } from './hooks/useDiagramType';
+import { useVersionHistory } from './hooks/useVersionHistory';
 import { loadLlmConfig, saveLlmConfig } from './services/storage';
 import type { LlmConfig, DiagramType, LlmMode, LlmInteraction } from './types';
 
@@ -26,6 +28,10 @@ export default function App() {
   const [llmMode, setLlmMode] = useState<LlmMode>('action');
   const [lastInteraction, setLastInteraction] = useState<LlmInteraction | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
+  const lastPromptRef = useRef('');
+  const llmBusyCounterRef = useRef(0);
+  const restoringRef = useRef(false);
 
   const { toasts, addToast, removeToast } = useToasts();
   const { theme, toggleTheme, isDark } = useTheme();
@@ -47,6 +53,15 @@ export default function App() {
   } = useMermaid();
 
   const { isLoading, error: llmError, generate, ask, clearError, abort } = useLLM();
+
+  const versionHistory = useVersionHistory();
+  const {
+    snapshots,
+    activeIndex,
+    handleManualEdit,
+    handleLlmGenerate,
+    restoreToIndex,
+  } = versionHistory;
 
   const handleToggleSplitView = useCallback(() => {
     setIsSplitView((prev) => !prev);
@@ -162,30 +177,43 @@ export default function App() {
         response: result.rawContent,
         timestamp: Date.now(),
       });
+      lastPromptRef.current = instruction;
 
       // The LLM output is always consumed into the editor (valid or not),
       // so detect its diagram type regardless of validity to keep the toolbar in sync.
       detectDiagramType(result.mermaid);
 
-      if (effectiveGenerateSummary) {
-        // LLM returned both mermaid and summary
-        const valid = await updateFromLlmWithSummary(result.mermaid, result.summary || '');
-        if (valid) {
-          addToast('Diagram and summary updated successfully.', 'success');
+      // Increment the LLM busy counter so the currentMermaid effect doesn't
+      // record a manual snapshot while the LLM update is in flight.
+      llmBusyCounterRef.current++;
+
+      try {
+        if (effectiveGenerateSummary) {
+          // LLM returned both mermaid and summary
+          const valid = await updateFromLlmWithSummary(result.mermaid, result.summary || '');
+          if (valid) {
+            // Record LLM snapshot in version history
+            handleLlmGenerate(result.mermaid, result.summary || '', instruction);
+            addToast('Diagram and summary updated successfully.', 'success');
+          } else {
+            addToast('LLM returned invalid Mermaid. The output was loaded into the editor — check the parse error and fix it.', 'danger');
+          }
         } else {
-          addToast('LLM returned invalid Mermaid. The output was loaded into the editor — check the parse error and fix it.', 'danger');
+          // LLM returned only mermaid
+          const valid = await updateFromLlm(result.mermaid);
+          if (valid) {
+            // Record LLM snapshot in version history
+            handleLlmGenerate(result.mermaid, summary, instruction);
+            addToast('Diagram updated successfully.', 'success');
+          } else {
+            addToast('LLM returned invalid Mermaid. The output was loaded into the editor — check the parse error and fix it.', 'danger');
+          }
         }
-      } else {
-        // LLM returned only mermaid
-        const valid = await updateFromLlm(result.mermaid);
-        if (valid) {
-          addToast('Diagram updated successfully.', 'success');
-        } else {
-          addToast('LLM returned invalid Mermaid. The output was loaded into the editor — check the parse error and fix it.', 'danger');
-        }
+      } finally {
+        llmBusyCounterRef.current--;
       }
     },
-    [currentMermaid, llmConfig, includeSummary, generateSummary, includeSyntaxGuide, summary, generate, clearError, updateFromLlm, updateFromLlmWithSummary, addToast, detectDiagramType]
+    [currentMermaid, llmConfig, includeSummary, generateSummary, includeSyntaxGuide, summary, generate, clearError, updateFromLlm, updateFromLlmWithSummary, addToast, detectDiagramType, handleLlmGenerate]
   );
 
   const handleAskSubmit = useCallback(
@@ -226,6 +254,25 @@ export default function App() {
     setIsHistoryOpen(false);
   }, []);
 
+  const handleOpenVersionHistory = useCallback(() => {
+    setIsVersionHistoryOpen(true);
+  }, []);
+
+  const handleCloseVersionHistory = useCallback(() => {
+    setIsVersionHistoryOpen(false);
+  }, []);
+
+  const handleRestoreSnapshot = useCallback((index: number) => {
+    const snapshot = restoreToIndex(index);
+    if (snapshot) {
+      restoringRef.current = true;
+      setMermaidDirectly(snapshot.mermaid);
+      setSummary(snapshot.summary);
+      detectDiagramType(snapshot.mermaid);
+      addToast(`Restored to version #${index + 1}.`, 'info');
+    }
+  }, [restoreToIndex, setMermaidDirectly, setSummary, detectDiagramType, addToast]);
+
   // Show LLM errors as toasts
   useEffect(() => {
     if (llmError) {
@@ -247,6 +294,42 @@ export default function App() {
     },
     [setEditorMermaid, updateFromEditor, detectDiagramType]
   );
+
+  // Track when manual edit is validated and record snapshot.
+  // We skip snapshot recording when:
+  //  - restoringRef is true (during restore, handleRestoreSnapshot sets it)
+  //  - llmBusyCounterRef > 0 (during LLM update, handleLlmGenerate is called explicitly)
+  const prevCurrentMermaidRef = useRef(currentMermaid);
+  const pendingEditRef = useRef(false);
+  useEffect(() => {
+    if (prevCurrentMermaidRef.current !== currentMermaid) {
+      prevCurrentMermaidRef.current = currentMermaid;
+      if (!restoringRef.current && llmBusyCounterRef.current === 0) {
+        // If we are in a restored state (activeIndex < last index), prompt user before discarding future snapshots
+        if (activeIndex < snapshots.length - 1 && !pendingEditRef.current) {
+          pendingEditRef.current = true;
+          const confirmed = window.confirm(
+            'You are editing a past snapshot. This will discard all future snapshots. Continue?'
+          );
+          pendingEditRef.current = false;
+          if (!confirmed) {
+            // User canceled - restore back to the latest snapshot
+            const latestSnapshot = snapshots[snapshots.length - 1];
+            if (latestSnapshot) {
+              restoringRef.current = true;
+              setMermaidDirectly(latestSnapshot.mermaid);
+              setSummary(latestSnapshot.summary);
+              // Also restore the activeIndex back
+              restoreToIndex(snapshots.length - 1);
+            }
+            return;
+          }
+        }
+        handleManualEdit(currentMermaid, summary);
+      }
+      restoringRef.current = false;
+    }
+  }, [currentMermaid, summary, handleManualEdit, activeIndex, snapshots, setMermaidDirectly, setSummary, restoreToIndex]);
 
   useEffect(() => {
     return () => {
@@ -272,6 +355,7 @@ export default function App() {
         onImportProject={handleImportProject}
         onToggleTheme={toggleTheme}
         onOpenHistory={handleOpenHistory}
+        onOpenVersionHistory={handleOpenVersionHistory}
       />
 
       <div className="flex-grow-1 position-relative" style={{ minHeight: 0, backgroundColor: 'var(--app-bg)' }}>
@@ -313,6 +397,14 @@ export default function App() {
       />
       <SettingsDialog show={isSettingsOpen} config={llmConfig} onSave={handleSaveSettings} onCancel={handleCancelSettings} />
       <PromptHistoryDialog show={isHistoryOpen} interaction={lastInteraction} onClose={handleCloseHistory} />
+      <VersionHistoryDialog
+        show={isVersionHistoryOpen}
+        snapshots={snapshots}
+        activeIndex={activeIndex}
+        onRestore={handleRestoreSnapshot}
+        onClose={handleCloseVersionHistory}
+        theme={theme}
+      />
 
       <ToastContainer position="top-end" className="p-3">
         {toasts.map((t) => (

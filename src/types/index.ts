@@ -61,6 +61,22 @@ export interface DiagramDocument {
 
 export type ViewMode = 'diagram-only' | 'split';
 
+export type SnapshotType = 'manual' | 'llm';
+
+export interface DiagramSnapshot {
+  id: string;
+  timestamp: number;
+  type: SnapshotType;
+  prompt: string;
+  mermaid: string;
+  summary: string;
+}
+
+export interface VersionHistory {
+  snapshots: DiagramSnapshot[];
+  activeIndex: number;
+}
+
 export const DIAGRAM_DISPLAY_NAMES: Record<DiagramType, string> = {
   flowchart: 'Flowchart',
   sequenceDiagram: 'Sequence',

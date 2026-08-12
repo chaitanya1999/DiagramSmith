@@ -123,6 +123,40 @@ body {
 }
 
 /* ============================================
+   Version History Dialog Styling
+   ============================================ */
+.version-card {
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.version-card-active {
+  border-width: 2px !important;
+}
+
+.version-code-block {
+  background-color: var(--editor-bg);
+  color: var(--app-text);
+  font-family: 'Fira Code', 'Consolas', monospace;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.diff-code {
+  background-color: var(--editor-bg);
+  color: var(--app-text);
+  font-family: 'Fira Code', 'Consolas', monospace;
+  line-height: 1.3;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.version-history-list {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* ============================================
    Toolbar Styling
    ============================================ */
 .toolbar {

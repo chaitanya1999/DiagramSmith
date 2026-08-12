@@ -380,9 +380,13 @@ export const STORAGE_KEYS = {
 	THEME: 'diagramsmith-theme',
 	DIAGRAM_TYPE: 'diagramsmith-diagram-type',
 	SUMMARY: 'diagramsmith-summary',
+	VERSION_HISTORY: 'diagramsmith-version-history',
+	MAX_SNAPSHOTS: 'diagramsmith-max-snapshots',
 };
 
 export const REQUEST_TIMEOUT_MS = 300000;
+
+export const DEFAULT_MAX_SNAPSHOTS = 5;
 
 export const ALL_DIAGRAM_TYPES: DiagramType[] = [
 	'flowchart',

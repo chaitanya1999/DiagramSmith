@@ -20,6 +20,7 @@ interface ToolbarProps {
     onImportProject: (content: string) => Promise<boolean>;
     onToggleTheme: () => void;
     onOpenHistory: () => void;
+    onOpenVersionHistory: () => void;
 }
 
 export function Toolbar({
@@ -38,6 +39,7 @@ export function Toolbar({
     onImportProject,
     onToggleTheme,
     onOpenHistory,
+    onOpenVersionHistory,
 }: ToolbarProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showDiagramDropdown, setShowDiagramDropdown] = useState(false);
@@ -191,6 +193,13 @@ export function Toolbar({
             </Dropdown>
 
             <div className="ms-auto d-flex align-items-center gap-2">
+                <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={onOpenVersionHistory}
+                    title="View version history"
+                >
+                    📋 Versions
+                </button>
                 <button
                     className="btn btn-sm btn-outline-secondary"
                     onClick={onOpenHistory}
