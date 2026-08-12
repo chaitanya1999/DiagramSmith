@@ -88,12 +88,16 @@ export async function editDiagram(
       temperature: config.temperature,
     };
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (config.sendAuthorization !== false && config.apiKey) {
+      headers['Authorization'] = `Bearer ${config.apiKey}`;
+    }
+
     const response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-      },
+      headers,
       body: JSON.stringify(requestBody),
       signal: options?.signal,
     });
@@ -223,12 +227,16 @@ export async function askDiagram(
       temperature: config.temperature,
     };
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (config.sendAuthorization !== false && config.apiKey) {
+      headers['Authorization'] = `Bearer ${config.apiKey}`;
+    }
+
     const response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-      },
+      headers,
       body: JSON.stringify(requestBody),
       signal: options?.signal,
     });

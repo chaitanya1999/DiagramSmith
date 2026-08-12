@@ -39,6 +39,7 @@ export interface LlmConfig {
   model: string;
   temperature: number;
   maxTokens: number;
+  sendAuthorization: boolean;
 }
 
 export interface LlmInteraction {

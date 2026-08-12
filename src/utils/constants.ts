@@ -372,6 +372,7 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
 	model: 'gpt-4o-mini',
 	temperature: 0.3,
 	maxTokens: 2048,
+	sendAuthorization: true,
 };
 
 export const STORAGE_KEYS = {

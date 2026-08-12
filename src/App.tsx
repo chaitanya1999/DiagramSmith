@@ -152,7 +152,7 @@ export default function App() {
 
   const handlePromptSubmit = useCallback(
     async (instruction: string) => {
-      if (!llmConfig.apiKey) {
+      if (llmConfig.sendAuthorization !== false && !llmConfig.apiKey) {
         addToast('Please configure your API key in Settings first.', 'danger');
         return;
       }
@@ -218,7 +218,7 @@ export default function App() {
 
   const handleAskSubmit = useCallback(
     async (question: string) => {
-      if (!llmConfig.apiKey) {
+      if (llmConfig.sendAuthorization !== false && !llmConfig.apiKey) {
         addToast('Please configure your API key in Settings first.', 'danger');
         return;
       }

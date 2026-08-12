@@ -16,6 +16,7 @@ export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialo
   const [model, setModel] = useState(config.model);
   const [temperature, setTemperature] = useState(config.temperature.toString());
   const [maxTokens, setMaxTokens] = useState(config.maxTokens.toString());
+  const [sendAuthorization, setSendAuthorization] = useState(config.sendAuthorization);
   const [maxSnapshots, setMaxSnapshots] = useState(() => loadMaxSnapshots().toString());
 
   useEffect(() => {
@@ -24,6 +25,7 @@ export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialo
     setModel(config.model);
     setTemperature(config.temperature.toString());
     setMaxTokens(config.maxTokens.toString());
+    setSendAuthorization(config.sendAuthorization);
     setMaxSnapshots(loadMaxSnapshots().toString());
   }, [config, show]);
 
@@ -42,6 +44,7 @@ export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialo
       model: model.trim(),
       temperature: isNaN(temp) ? 0.3 : Math.min(2, Math.max(0, temp)),
       maxTokens: isNaN(tokens) ? 2048 : Math.max(1, tokens),
+      sendAuthorization,
     });
   };
 
@@ -103,6 +106,18 @@ export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialo
               Lower = more deterministic, higher = more creative.
             </Form.Text>
           </Form.Group>
+
+          <Form.Check
+            type="switch"
+            id="send-auth-switch"
+            label="Send Authorization Header"
+            checked={sendAuthorization}
+            onChange={(e) => setSendAuthorization(e.target.checked)}
+            className="mb-3"
+          />
+          <Form.Text className="text-muted d-block mb-3" style={{ marginTop: '-0.5rem' }}>
+            When enabled, the API key is sent as a Bearer token. Disable for local models (e.g., Ollama, LM Studio) that don't require authentication.
+          </Form.Text>
 
           <hr />
           <h6 className="mb-3 text-muted">Version History</h6>
