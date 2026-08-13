@@ -12,6 +12,7 @@ interface UseVersionHistoryReturn {
   restoreToIndex: (index: number) => DiagramSnapshot | null;
   setMaxSnapshots: (max: number) => void;
   resetHistory: () => void;
+  clearHistoryKeepCurrent: () => void;
 }
 
 function generateId(): string {
@@ -163,6 +164,19 @@ export function useVersionHistory(): UseVersionHistoryReturn {
     setIsRestored(false);
   }, [persist]);
 
+  const clearHistoryKeepCurrent = useCallback(() => {
+    const current = historyRef.current;
+    if (current.snapshots.length === 0 || current.activeIndex < 0) return;
+    const currentSnapshot = current.snapshots[current.activeIndex];
+    const newHistory: VersionHistory = {
+      snapshots: [currentSnapshot],
+      activeIndex: 0,
+    };
+    setHistory(newHistory);
+    persist(newHistory);
+    setIsRestored(false);
+  }, [persist]);
+
   return {
     snapshots: history.snapshots,
     activeIndex: history.activeIndex,
@@ -173,5 +187,6 @@ export function useVersionHistory(): UseVersionHistoryReturn {
     restoreToIndex,
     setMaxSnapshots: handleSetMaxSnapshots,
     resetHistory,
+    clearHistoryKeepCurrent,
   };
 }

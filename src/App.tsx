@@ -61,6 +61,7 @@ export default function App() {
     handleManualEdit,
     handleLlmGenerate,
     restoreToIndex,
+    clearHistoryKeepCurrent,
   } = versionHistory;
 
   const handleToggleSplitView = useCallback(() => {
@@ -403,6 +404,7 @@ export default function App() {
         activeIndex={activeIndex}
         onRestore={handleRestoreSnapshot}
         onClose={handleCloseVersionHistory}
+        onClearHistory={clearHistoryKeepCurrent}
         theme={theme}
       />
 

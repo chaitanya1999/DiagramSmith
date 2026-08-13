@@ -16,7 +16,7 @@ The Mermaid source code is the **single source of truth** — you can edit it ma
 - **🔀 Dual Output Mode** — LLM can generate both Mermaid syntax and a text summary simultaneously (separated by a delimiter), improving multi-turn editing quality
 - **📖 Syntax Guide** — Optionally injects a concise syntax reference for the current diagram type into the system prompt, helping LLMs generate valid syntax for less common diagram types
 - **🛡️ Consume Invalid Output** — Invalid LLM output is never discarded: it is loaded into the editor with the parse error shown, while the last valid diagram remains rendered
-- **✏️ Manual Editing** — Full CodeMirror 6 editor with custom Mermaid syntax highlighting (50+ arrow patterns, keywords, node IDs, edge labels, comments, dates), real-time validation, and parse error display
+- **✏️ Manual Editing** — Full CodeMirror 6 editor with `codemirror-lang-mermaid` Lezer-based syntax highlighting, real-time validation, and parse error display
 - **↩ Word Wrap Toggle** — Toggle word wrapping in the editor on/off via toolbar button
 - **📊 29 Diagram Types** — Flowchart, Sequence, Class, State, ER, Gantt, Pie, Gitgraph, Journey, Mindmap, Timeline, Sankey, Swimlanes, Quadrant, Requirement, C4, XY Chart, Block, Packet, Kanban, Architecture, Radar, Event Modeling, Treemap, Venn, Ishikawa, Wardley, Cynefin, TreeView
 - **🔄 Diagram Type Auto-Detection** — The diagram type is automatically detected from the Mermaid code's first line, keeping the toolbar dropdown in sync. Supports aliases (e.g., `graph` → flowchart, `C4Context` → c4)
@@ -39,7 +39,7 @@ The Mermaid source code is the **single source of truth** — you can edit it ma
 | Framework | React 19, TypeScript ~6.0 |
 | Build | Vite 5 |
 | UI | Bootstrap 5.3 + react-bootstrap |
-| Editor | CodeMirror 6 with custom Mermaid StreamLanguage syntax highlighting |
+| Editor | CodeMirror 6 with `codemirror-lang-mermaid` Lezer-based syntax highlighting |
 | Merge / Diff | @codemirror/merge |
 | Diagram Renderer | Mermaid.js 11 |
 | Split Panels | react-resizable-panels |
@@ -98,8 +98,7 @@ src/
     ├── constants.ts                # Default templates (29 types), LLM config defaults, storage keys, system prompt builders
     │                               # (buildSystemPrompt for Action, buildAskSystemPrompt for Ask), diagram type detection
     │                               # (getDiagramType with aliases), SUMMARY_DELIMITER, REQUEST_TIMEOUT_MS (5 min), ALL_DIAGRAM_TYPES
-    ├── diagramSyntax.ts            # Concise syntax reference guides for all 29 diagram types
-    └── mermaidLanguage.ts          # Custom CodeMirror StreamLanguage for Mermaid syntax highlighting
+    └── diagramSyntax.ts            # Concise syntax reference guides for all 29 diagram types
 ```
 
 ### Component Tree
@@ -293,6 +292,7 @@ The version history system tracks every change to your diagram, whether made man
 - **Expand to View** — Click ▼ to expand a snapshot and view the full Mermaid code and summary at that point in time
 - **One-Click Restore** — Click "Restore" to revert the diagram to any previous snapshot. If you then make edits, a confirmation dialog warns that future snapshots will be discarded
 - **Configurable Capacity** — Set the maximum number of snapshots (1–50) in Settings. The oldest snapshots are automatically trimmed when the limit is exceeded
+- **Clear All (Keep Current)** — One-click button in the Version History modal to delete all snapshots except the current version, with a confirmation dialog to prevent accidental data loss
 - **Persistent** — All snapshots are saved to localStorage and survive page reloads
 
 ### How Snapshots Work
@@ -339,19 +339,18 @@ In Ask mode, the LLM is instructed to answer the user's question about the diagr
 
 ## Syntax Highlighting
 
-The CodeMirror editor features a custom `StreamLanguage` parser that provides comprehensive Mermaid syntax highlighting with distinct colors for:
+The CodeMirror editor uses the [`codemirror-lang-mermaid`](https://github.com/inspirnathan/codemirror-lang-mermaid) package, a Lezer-based grammar parser that provides comprehensive Mermaid syntax highlighting. It supports all major Mermaid diagram types with proper grammar-based tokenization, replacing the previous custom `StreamLanguage` parser.
 
-| Token Type | Elements |
-|------------|----------|
-| **Keywords** | Diagram type declarations: `flowchart`, `sequenceDiagram`, `classDiagram`, etc. |
-| **Attribute Names** | Meta keywords: `section`, `title`, `subgraph`, `participant`, `loop`, `alt`, `note`, etc. |
-| **Operators** | 50+ arrow/connector patterns: `-->`, `->>`, `==>`, `-.->`, `<|--`, `o--o`, etc. |
-| **Strings** | Node labels in brackets: `[text]`, `{text}`, `(text)` |
-| **Numbers** | Numeric values and dates (`YYYY-MM-DD`) |
-| **Comments** | `%%` line comments (gray, italic) |
-| **Punctuation** | Colon, semicolon, brackets, pipe characters |
-| **Definition Keywords** | Node IDs and identifiers (teal, bold) |
-| **Attribute Values** | Edge labels in pipes: `\|text\|` |
+Syntax colors are themed via CSS custom properties (see [CSS Theming](#css-theming)):
+- `--syntax-keyword` — Diagram type declarations and keywords
+- `--syntax-attribute` — Meta keywords and attributes
+- `--syntax-operator` — Arrows and connectors
+- `--syntax-string` — Node labels and string values
+- `--syntax-number` — Numeric values and dates
+- `--syntax-comment` — `%%` line comments
+- `--syntax-punctuation` — Colons, brackets, pipe characters
+- `--syntax-definition` — Node IDs and identifiers
+- `--syntax-attribute-value` — Edge labels in pipes
 
 ---
 

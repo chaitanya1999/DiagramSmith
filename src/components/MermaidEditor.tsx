@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
-import { yamlLanguage } from '@codemirror/lang-yaml';
+import { mermaidLanguage } from 'codemirror-lang-mermaid';
 import { keymap } from '@codemirror/view';
 import { indentMore, indentLess } from '@codemirror/commands';
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -37,7 +37,7 @@ export function MermaidEditor({ value, onChange, parseError, theme, wordWrap, su
 
     const extensions = [
       basicSetup,
-      yamlLanguage,
+      mermaidLanguage,
       keymap.of([
         { key: 'Tab', run: indentMore, preventDefault: true },
         { key: 'Shift-Tab', run: indentLess, preventDefault: true }
@@ -104,7 +104,7 @@ export function MermaidEditor({ value, onChange, parseError, theme, wordWrap, su
     });
     const base = [
       basicSetup,
-      yamlLanguage,
+      mermaidLanguage,
       keymap.of([
         { key: 'Tab', run: indentMore, preventDefault: true },
         { key: 'Shift-Tab', run: indentLess, preventDefault: true }

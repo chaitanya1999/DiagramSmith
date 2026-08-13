@@ -9,6 +9,7 @@ interface VersionHistoryDialogProps {
   activeIndex: number;
   onRestore: (index: number) => void;
   onClose: () => void;
+  onClearHistory: () => void;
   theme: ThemeMode;
 }
 
@@ -26,6 +27,7 @@ export function VersionHistoryDialog({
   activeIndex,
   onRestore,
   onClose,
+  onClearHistory,
   theme,
 }: VersionHistoryDialogProps) {
   const [expandedSnapshot, setExpandedSnapshot] = useState<string | null>(null);
@@ -178,6 +180,20 @@ export function VersionHistoryDialog({
             ? `Showing ${snapshots.length} version${snapshots.length > 1 ? 's' : ''} (newest first)`
             : ''}
         </small>
+        <Button
+          variant="outline-danger"
+          size="sm"
+          disabled={snapshots.length <= 1}
+          onClick={() => {
+            if (window.confirm('Are you sure you want to delete all version history except the current version? This cannot be undone.')) {
+              setExpandedSnapshot(null);
+              setDiffSnapshotId(null);
+              onClearHistory();
+            }
+          }}
+        >
+          🗑️ Clear All (Keep Current)
+        </Button>
         <Button variant="secondary" onClick={onClose}>
           Close
         </Button>

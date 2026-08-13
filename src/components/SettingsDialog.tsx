@@ -53,7 +53,7 @@ export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialo
       <Modal.Header closeButton>
         <Modal.Title>⚙️ Settings</Modal.Title>
       </Modal.Header>
-      <Modal.Body>
+      <Modal.Body style={{ maxHeight: '70vh', overflowY: 'auto' }}>
         <Form>
           <h6 className="mb-3 text-muted">LLM Configuration</h6>
 

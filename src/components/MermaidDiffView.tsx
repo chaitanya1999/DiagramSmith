@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { EditorView } from '@codemirror/view';
 import { Compartment } from '@codemirror/state';
-import { yamlLanguage } from '@codemirror/lang-yaml';
+import { mermaidLanguage } from 'codemirror-lang-mermaid';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { MergeView } from '@codemirror/merge';
 import type { ThemeMode } from '../types';
@@ -59,7 +59,7 @@ const diffHighlightTheme = EditorView.baseTheme({
 
 function makeBaseExtensions() {
   return [
-    yamlLanguage,
+    mermaidLanguage,
     EditorView.editable.of(false),
     EditorView.theme({
       '&': { height: '100%' },
