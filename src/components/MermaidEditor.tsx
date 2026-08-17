@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
@@ -8,6 +8,7 @@ import { indentMore, indentLess } from '@codemirror/commands';
 import { oneDark } from '@codemirror/theme-one-dark';
 import type { ThemeMode } from '../types';
 import { indentUnit } from '@codemirror/language';
+import { ErrorDialog } from './ErrorDialog';
 
 interface MermaidEditorProps {
   value: string;
@@ -24,6 +25,12 @@ export function MermaidEditor({ value, onChange, parseError, theme, wordWrap, su
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const [showErrorModal, setShowErrorModal] = useState(false);
+
+  // Auto-dismiss the error modal if the error clears while it's open
+  useEffect(() => {
+    if (!parseError) setShowErrorModal(false);
+  }, [parseError]);
 
   useEffect(() => {
     if (!editorRef.current) return;
@@ -162,10 +169,20 @@ export function MermaidEditor({ value, onChange, parseError, theme, wordWrap, su
         </Panel>
       </Group>
       {parseError && (
-        <div className="error-footer px-3 py-1">
-          <small className="text-danger fw-semibold">{parseError}</small>
+        <div className="error-footer px-3 py-1 d-flex justify-content-between align-items-start gap-2">
+          <small className="text-danger fw-semibold" style={{ whiteSpace: 'pre-wrap' }}>{parseError}</small>
+          <button
+            type="button"
+            className="btn btn-sm error-footer-expand-btn flex-shrink-0"
+            onClick={() => setShowErrorModal(true)}
+            title="View full error"
+            aria-label="Expand error details"
+          >
+            🔍 View Full Error
+          </button>
         </div>
       )}
+      <ErrorDialog show={showErrorModal} error={parseError} onClose={() => setShowErrorModal(false)} />
     </div>
   );
 }

@@ -28,10 +28,11 @@ export function PromptBar({
   onIncludeSyntaxGuideChange,
   onAbort,
 }: PromptBarProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [stage, setStage] = useState<'idle' | 'peek' | 'expanded'>('idle');
   const [instruction, setInstruction] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastPromptRef = useRef('');
+  const peekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isAskMode = mode === 'ask';
 
@@ -41,7 +42,7 @@ export function PromptBar({
     lastPromptRef.current = trimmed;
     onSubmit(trimmed);
     setInstruction('');
-    setIsExpanded(false);
+    setStage('idle');
   }, [instruction, isLoading, onSubmit]);
 
   const handleKeyDown = useCallback(
@@ -61,26 +62,63 @@ export function PromptBar({
 
   const handleCancel = useCallback(() => {
     setInstruction('');
-    setIsExpanded(false);
+    setStage('idle');
     onAbort?.();
   }, [onAbort]);
 
   // Focus textarea when expanded
   useEffect(() => {
-    if (isExpanded && textareaRef.current) {
+    if (stage === 'expanded' && textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [isExpanded]);
+  }, [stage]);
+
+  // Clear any pending collapse timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (peekTimeoutRef.current) clearTimeout(peekTimeoutRef.current);
+    };
+  }, []);
+
+  const handlePointerEnter = useCallback(() => {
+    if (peekTimeoutRef.current) {
+      clearTimeout(peekTimeoutRef.current);
+      peekTimeoutRef.current = null;
+    }
+    setStage((current) => (current === 'idle' ? 'peek' : current));
+  }, []);
+
+  const handlePointerLeave = useCallback(() => {
+    peekTimeoutRef.current = setTimeout(() => {
+      setStage((current) => (current === 'peek' ? 'idle' : current));
+    }, 150);
+  }, []);
 
   return (
-    <div className="position-fixed start-50 translate-middle-x" style={{ bottom: '2rem', zIndex: 1050, width: 'min(600px, 90%)' }}>
+    <div
+      className={`position-fixed start-50 translate-middle-x prompt-bar-wrapper prompt-bar-stage-${stage}`}
+      style={{ bottom: '2rem', zIndex: 1050 }}
+      onMouseEnter={handlePointerEnter}
+      onMouseLeave={handlePointerLeave}
+    >
       <div className="card prompt-bar-card shadow-lg border-1">
-        {!isExpanded ? (
+        {stage !== 'expanded' ? (
           <button
-            className="btn btn-light w-100 text-center py-2"
-            onClick={() => setIsExpanded(true)}
+            type="button"
+            className={`btn prompt-bar-trigger w-100 text-center ${isLoading ? 'prompt-bar-loading' : ''}`}
+            onClick={() => setStage('expanded')}
+            aria-expanded={false}
+            aria-label="Ask AI to modify diagram"
           >
-            <span className="fw-semibold">💬 Ask AI to modify diagram...</span>
+            {stage === 'idle' ? (
+              isLoading ? (
+                <span className="spinner-border spinner-border-sm" role="status" />
+              ) : (
+                <span className="prompt-bar-circle-label">AI</span>
+              )
+            ) : (
+              <span className="fw-semibold">💬 Ask AI to modify diagram...</span>
+            )}
           </button>
         ) : (
           <div className="card-body p-3">
