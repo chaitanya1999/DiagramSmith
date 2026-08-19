@@ -2,7 +2,7 @@ import type { LlmConfig } from '../types';
 import {
   buildSystemPrompt,
   buildAskSystemPrompt,
-  getDiagramType,
+  tryGetDiagramType,
   SUMMARY_DELIMITER,
 } from '../utils/constants';
 
@@ -68,7 +68,7 @@ export async function editDiagram(
     includeSummary: options?.includeSummary,
     generateSummary: options?.generateSummary,
     includeSyntaxGuide: options?.includeSyntaxGuide,
-    diagramType: getDiagramType(currentMermaid),
+    diagramType: tryGetDiagramType(currentMermaid),
   });
 
   // Build user message
@@ -207,7 +207,7 @@ export async function askDiagram(
   const systemPrompt = buildAskSystemPrompt({
     includeSummary: options?.includeSummary,
     includeSyntaxGuide: options?.includeSyntaxGuide,
-    diagramType: getDiagramType(currentMermaid),
+    diagramType: tryGetDiagramType(currentMermaid),
   });
 
   // Build user message

@@ -17,6 +17,10 @@
   --accent: #4A6CF7;
   --accent-hover: #3B5DE7;
   --accent-light: rgba(74, 108, 247, 0.1);
+  --fab-bg: #3B5DE7;
+  --fab-bg-hover: #2F4FD4;
+  --fab-fg: #FFFFFF;
+  --fab-ring: rgba(74, 108, 247, 0.28);
   --success: #22C55E;
   --warning: #F59E0B;
   --danger: #EF4444;
@@ -55,6 +59,10 @@
   --accent: #6B8CFF;
   --accent-hover: #7D9BFF;
   --accent-light: rgba(107, 140, 255, 0.15);
+  --fab-bg: #6B8CFF;
+  --fab-bg-hover: #8AA5FF;
+  --fab-fg: #16181D;
+  --fab-ring: rgba(107, 140, 255, 0.35);
   --success: #4ADE80;
   --warning: #FBBF24;
   --danger: #F87171;
@@ -541,20 +549,39 @@ textarea.form-control.border-0 {
   box-shadow: 0 0 0 3px var(--accent-light), var(--shadow-lg);
 }
 
-/* Idle: small translucent circle */
+/* Idle: solid accent FAB */
 .prompt-bar-stage-idle {
   width: 56px;
 }
 .prompt-bar-stage-idle .prompt-bar-card {
   border-radius: 50%;
-  background: color-mix(in srgb, var(--surface-bg) 70%, transparent);
-  backdrop-filter: blur(8px);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  overflow: visible; /* let the halo ring escape the 56px circle */
 }
 .prompt-bar-stage-idle .prompt-bar-trigger {
   width: 56px;
   height: 56px;
   padding: 0;
   border-radius: 50%;
+  background: var(--fab-bg);
+  color: var(--fab-fg);
+  border: 1px solid color-mix(in srgb, #FFFFFF 22%, transparent);
+  box-shadow: 0 0 0 4px var(--fab-ring), var(--shadow-lg);
+}
+.prompt-bar-stage-idle .prompt-bar-trigger:hover {
+  background: var(--fab-bg-hover);
+  color: var(--fab-fg);
+  transform: scale(1.06);
+  box-shadow: 0 0 0 6px var(--fab-ring), var(--shadow-lg);
+}
+.prompt-bar-stage-idle .prompt-bar-trigger:active {
+  transform: scale(0.97);
+}
+.prompt-bar-stage-idle .prompt-bar-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--surface-bg), 0 0 0 6px var(--accent), var(--shadow-lg);
 }
 
 /* Peek: translucent pill bar (hover preview) */
@@ -594,17 +621,27 @@ textarea.form-control.border-0 {
 }
 
 .prompt-bar-circle-label {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 800;
   letter-spacing: 0.5px;
+  color: inherit;
 }
 
 @keyframes prompt-bar-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--accent-light); }
-  50% { box-shadow: 0 0 0 8px transparent; }
+  0%, 100% { box-shadow: 0 0 0 4px var(--fab-ring), 0 0 0 4px var(--accent-light), var(--shadow-lg); }
+  50% { box-shadow: 0 0 0 4px var(--fab-ring), 0 0 0 14px transparent, var(--shadow-lg); }
 }
 .prompt-bar-loading {
   animation: prompt-bar-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prompt-bar-loading {
+    animation: none;
+  }
+  .prompt-bar-stage-idle .prompt-bar-trigger:hover {
+    transform: none;
+  }
 }
 
 /* ============================================

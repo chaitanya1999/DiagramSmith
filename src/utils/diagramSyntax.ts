@@ -33,14 +33,19 @@ export const DIAGRAM_SYNTAX_GUIDES: Record<DiagramType, string> = {
 
 	classDiagram: `CLASS DIAGRAM SYNTAX:
 - First line: classDiagram
-- Classes: class Name { +publicAttr type +method() type -privateAttr }
+- Classes: class Name { ... } with one member per line (+publicAttr type, +method() type, -privateAttr)
 - Relationships: A <|-- B (inheritance), A *-- B (composition), A o-- B (aggregation), A --> B (dependency), A ..> B (interface)
 - Cardinality: "1" *-- "many" B
 - Namespaces: namespace Name { class A }
 - Example:
   classDiagram
-    class Animal { +String name +makeSound() void }
-    class Dog { +String breed }
+    class Animal {
+        +String name
+        +makeSound() void
+    }
+    class Dog {
+        +String breed
+    }
     Animal <|-- Dog`,
 
 	'stateDiagram-v2': `STATE DIAGRAM SYNTAX:
@@ -184,12 +189,21 @@ export const DIAGRAM_SYNTAX_GUIDES: Record<DiagramType, string> = {
 
 	requirement: `REQUIREMENT DIAGRAM SYNTAX:
 - First line: requirementDiagram
-- Blocks: requirement name { id: 1 text: "..." risk: high verifymethod: test }, element name { type: simulation }
+- Blocks: requirement name { ... } and element name { ... }, with one field per line (the single-line brace form does NOT parse)
+- Requirement fields: id, text, risk (low/medium/high), verifymethod (analysis/inspection/test/demonstration)
+- Element fields: type, docref
 - Relations: element - satisfies -> requirement, requirement - verifies -> element, element - contains -> element
 - Example:
   requirementDiagram
-    requirement req1 { id: 1 text: "must work" risk: high verifymethod: test }
-    element el1 { type: simulation }
+    requirement req1 {
+      id: 1
+      text: "must work"
+      risk: high
+      verifymethod: test
+    }
+    element el1 {
+      type: simulation
+    }
     el1 - satisfies -> req1`,
 
 	c4: `C4 DIAGRAM SYNTAX:
@@ -383,4 +397,168 @@ export const DIAGRAM_SYNTAX_GUIDES: Record<DiagramType, string> = {
           "App.tsx"
       "public"
         "index.html"`,
+};
+
+/**
+ * Per-diagram-type correctness rules, injected into every system prompt for the
+ * detected diagram type.
+ *
+ * These are deliberately separate from DIAGRAM_SYNTAX_GUIDES above:
+ *   - DIAGRAM_RULES are constraints the model must obey and are ALWAYS injected.
+ *   - DIAGRAM_SYNTAX_GUIDES are optional reference material, injected only when
+ *     the "Include Syntax Guide" toggle is on.
+ *
+ * Quoting conventions differ per diagram type (pie requires quotes, sankey forbids
+ * them, flowchart tolerates either), so a single global quoting rule cannot be
+ * correct — that contradiction is what these entries exist to remove.
+ *
+ * Each entry must be satisfied by DEFAULT_TEMPLATES[type] and by this file's
+ * syntax-guide example for the same type. Derive the rules from those; never
+ * write a rule the shipped examples violate.
+ *
+ * Scope: describe how to WRITE new content for this type. Preserving what the
+ * diagram already contains is BASE_RULES' job — do not restate it here.
+ */
+export const DIAGRAM_RULES: Record<DiagramType, string> = {
+	flowchart: `FLOWCHART RULES:
+- Node IDs are alphanumeric/underscore with no spaces. Reuse existing IDs exactly; never rename or renumber them.
+- Quote new node text only if it contains [ ] { } ( ) " or a colon.
+- Edge label pipes take no padding spaces: -->|Yes| not --> | Yes |`,
+
+	sequenceDiagram: `SEQUENCE DIAGRAM RULES:
+- Participant names are bare identifiers; reuse existing spellings exactly.
+- Message text after the colon is plain unquoted text.
+- Every block opener (loop, alt, opt, par, critical) needs a matching end.`,
+
+	classDiagram: `CLASS DIAGRAM RULES:
+- Class names are bare identifiers; reuse existing names exactly.
+- Keep one member per line inside a class body. Do NOT collapse a multi-line class onto one line.
+- Preserve existing visibility prefixes (+ - # ~) and member order.`,
+
+	'stateDiagram-v2': `STATE DIAGRAM RULES:
+- State names are bare identifiers; [*] is the start/end pseudo-state. Reuse existing names exactly.
+- Quote text only in the state "Long Name" as id form; transition labels after the colon are unquoted.
+- Every composite state block needs a matching closing brace.`,
+
+	erDiagram: `ER DIAGRAM RULES:
+- Entity names are bare and unquoted, and may contain hyphens (e.g. LINE-ITEM). Reuse existing casing exactly.
+- Relationship labels after the colon are unquoted.
+- Keep cardinality glyphs (||, |o, }o, }|) exactly as written; do not substitute equivalents.`,
+
+	gantt: `GANTT RULES:
+- All text is unquoted, including title, section names and task names.
+- Task IDs must stay unique, and existing IDs must be reused because dependencies reference them by name.
+- Dates must match the declared dateFormat. Preserve the existing column alignment of task lines.`,
+
+	pie: `PIE RULES:
+- Every label MUST be double-quoted: "Label" : number
+- Values are plain numbers — no units, thousands separators or percent signs.`,
+
+	gitgraph: `GITGRAPH RULES:
+- Branch and checkout names are bare identifiers; reuse existing branch names exactly.
+- Only id:, tag: and type: values are quoted (commit id: "A1" tag: "v1.0"); commands themselves are bare.
+- A branch must be created before it is checked out or merged; keep commands in chronological order.`,
+
+	journey: `JOURNEY RULES:
+- All text is unquoted. Task lines are: Task name: score: Actor1, Actor2 (score 0-9).
+- Tasks are indented under their section; indentation defines membership, so never re-indent existing lines.`,
+
+	mindmap: `MINDMAP RULES:
+- Indentation depth alone defines the hierarchy. Never change the indentation of existing lines.
+- Node text is bare; quote only if it contains ( ) [ ] or a colon.
+- There is exactly one root node.`,
+
+	timeline: `TIMELINE RULES:
+- All text is unquoted. Event lines are: period : event text
+- Line order is chronological order; do not reorder existing entries.`,
+
+	sankey: `SANKEY RULES:
+- Every data line is exactly: Source, Target, Value — comma-separated and unquoted.
+- Value must be a number.
+- Node names are their literal text, so reuse existing spellings exactly; identical text means the same node.`,
+
+	swimlane: `SWIMLANE RULES:
+- Node IDs are alphanumeric/underscore with no spaces. Reuse existing IDs exactly.
+- Quote new node text only if it contains [ ] { } ( ) " or a colon.
+- Edge label pipes take no padding spaces: -->|Yes| not --> | Yes |
+- Every subgraph (lane) needs a matching end.`,
+
+	quadrantChart: `QUADRANT CHART RULES:
+- All text is unquoted, including point names, which may contain spaces (Campaign A: [0.3, 0.6]).
+- Point coordinates are two numbers between 0 and 1.
+- Axis lines use the bare "Low --> High" form, not quoted labels.`,
+
+	requirement: `REQUIREMENT DIAGRAM RULES:
+- requirement and element names are bare identifiers; reuse existing names exactly.
+- Write one field per line inside a block — the single-line brace form does NOT parse.
+- Only the text: value is quoted; id:, risk:, verifymethod: and type: values are bare.
+- risk must be low, medium or high; verifymethod must be analysis, inspection, test or demonstration.`,
+
+	c4: `C4 RULES:
+- The first argument of every element is a bare id; all label and description arguments MUST be double-quoted.
+- Reuse existing ids exactly, because Rel(...) references them.
+- Keep each element on a single line.`,
+
+	xychart: `XY CHART RULES:
+- The title and axis labels are double-quoted; category tokens inside x-axis [...] are bare.
+- Every data series must have exactly as many values as there are x-axis categories.
+- Values are plain numbers.`,
+
+	block: `BLOCK DIAGRAM RULES:
+- Block text MUST be double-quoted inside the brackets: A["Text"]
+- Block IDs are bare alphanumeric/underscore; reuse existing IDs exactly.
+- Keep the columns N value consistent with the intended row width; use space for empty cells.`,
+
+	packet: `PACKET DIAGRAM RULES:
+- Field labels MUST be double-quoted; the title is unquoted.
+- Bit ranges must be contiguous, non-overlapping and in ascending order.`,
+
+	kanban: `KANBAN RULES:
+- All text is unquoted. Task lines are: taskId: Task text, indented under their column.
+- Task IDs must stay unique; reuse existing IDs exactly.
+- Indentation defines column membership; never re-indent existing lines.`,
+
+	architecture: `ARCHITECTURE RULES:
+- Service and group IDs are bare alphanumeric/underscore; reuse existing IDs exactly.
+- Labels in square brackets are unquoted; the icon in parentheses must be a supported icon name.
+- Edges must name a side at both ends: serviceA:R --> L:serviceB`,
+
+	radar: `RADAR CHART RULES:
+- The title is unquoted; axis and curve display labels in square brackets MUST be double-quoted.
+- Axis and curve keys are bare identifiers; reuse existing keys exactly.
+- Every curve must have exactly as many values as there are axes.`,
+
+	eventmodeling: `EVENT MODELING RULES:
+- All names are bare and unquoted. Frame lines are: tf NN type Name
+- NN is a unique two-digit sequence number; keep frames in ascending order and never renumber existing ones.
+- type must be one of ui, cmd/command, evt/event, rmo/readmodel, pcr/processor.`,
+
+	treemap: `TREEMAP RULES:
+- Every label MUST be double-quoted. Leaf nodes carry a value: "Label": 50
+- Indentation defines the hierarchy; never change the indentation of existing lines.
+- Only leaf nodes carry values; parent nodes must not.`,
+
+	venn: `VENN DIAGRAM RULES:
+- Set names are bare identifiers; the title and any ["Display Label"] MUST be double-quoted.
+- A union may only reference sets already defined above it; reuse existing set names exactly.`,
+
+	ishikawa: `ISHIKAWA RULES:
+- There are no identifiers, no quotes and no keywords — every line is plain text.
+- The first line after the directive is the problem statement; every later line is a cause.
+- Indentation depth alone defines the hierarchy; never change the indentation of existing lines.`,
+
+	wardley: `WARDLEY MAP RULES:
+- Component and anchor names are unquoted and may contain spaces (component Cup of Tea [0.79, 0.61]).
+- Coordinates are two numbers between 0 and 1 in square brackets.
+- Edges use -> and must reference names exactly as declared above.`,
+
+	cynefin: `CYNEFIN RULES:
+- Domain headers (clear, complicated, complex, chaotic, confused) are bare keywords on their own line.
+- Item text and edge labels MUST be double-quoted; the title is unquoted.
+- Items belong to the domain header above them; do not move items between domains.`,
+
+	treeView: `TREE VIEW RULES:
+- Every label MUST be double-quoted, including the title and root.
+- There is exactly one root node.
+- Indentation defines the hierarchy; never change the indentation of existing lines.`,
 };

@@ -1,5 +1,5 @@
 import type { LlmConfig, DiagramType } from '../types';
-import { DIAGRAM_SYNTAX_GUIDES } from './diagramSyntax';
+import { DIAGRAM_SYNTAX_GUIDES, DIAGRAM_RULES } from './diagramSyntax';
 
 export const DEFAULT_DIAGRAM_TYPE: DiagramType = 'flowchart';
 
@@ -118,7 +118,7 @@ export const DEFAULT_TEMPLATES: Record<DiagramType, string> = {
 	requirement: `requirementDiagram
     requirement test_req {
       id: 1
-      text: the test text.
+      text: "the test text."
       risk: high
       verifymethod: test
     }
@@ -172,16 +172,16 @@ export const DEFAULT_TEMPLATES: Record<DiagramType, string> = {
     max 10
     min 0`,
 	eventmodeling: `eventmodeling
-	
+
     tf 01 ui CartUI
     tf 02 cmd AddItem { description: string }
     tf 03 evt ItemAdded`,
 	treemap: `treemap-beta
-"Products"
-    "Electronics"
+    "Products"
+      "Electronics"
         "Phones": 50
         "Computers": 30
-    "Clothing"
+      "Clothing"
         "Shirts": 40
         "Pants": 40`,
 	venn: `venn-beta
@@ -201,31 +201,31 @@ export const DEFAULT_TEMPLATES: Record<DiagramType, string> = {
       Lack of training`,
 	wardley: `wardley-beta
 title Wardley Map
-	
+
 anchor Business [0.95, 0.63]
 component Cup of Tea [0.79, 0.61]
 component Tea [0.63, 0.81]
 component Kettle [0.43, 0.35]
-	
+
 Business -> Cup of Tea
 Cup of Tea -> Tea
 Tea -> Kettle`,
 	cynefin: `cynefin-beta
 title Cynefin Framework
-	
+
 complex
 "Investigate root cause"
 "Run experiments"
-	
+
 complicated
 "Expert analysis needed"
-	
+
 clear
 "Known procedure"
-	
+
 chaotic
 "Crisis response"
-	
+
 clear --> chaotic : "Complacency"`,
 	treeView: `treeView-beta
     title "File System"
@@ -243,22 +243,32 @@ export interface SystemPromptOptions {
   includeSummary?: boolean;
   generateSummary?: boolean;
   includeSyntaxGuide?: boolean;
-  diagramType: DiagramType;
+  /** null when the type could not be determined — see tryGetDiagramType. */
+  diagramType: DiagramType | null;
 }
 
+/**
+ * Rules that hold for every diagram type.
+ *
+ * Type-specific constraints (quoting, identifier form, indentation sensitivity)
+ * live in DIAGRAM_RULES instead, because they genuinely differ per type: pie
+ * requires quoted labels, sankey forbids quotes, and ishikawa has no identifiers
+ * at all. A blanket quoting rule here contradicted both the shipped templates and
+ * several syntax guides, which pushed the model into rewriting whole diagrams.
+ *
+ * Division of labour: these rules say what to PRESERVE in the existing diagram;
+ * DIAGRAM_RULES says how to WRITE anything new. Keep it that way — restating a
+ * preservation rule per type only dilutes the prompt.
+ */
 const BASE_RULES = `Rules:
 - The first line of the code is the diagram type declaration (e.g., flowchart TD, sequenceDiagram, classDiagram).
-- Do NOT change mermaid diagram type unless user explicitly asks to.
+- Do NOT change the diagram type unless the user explicitly asks to.
 - Modify the existing Mermaid diagram only.
-- Node IDs must be alphanumeric with underscores without spaces
-- Preserve node identifiers whenever possible.
-- All node text must be enclosed in double quotes
-- Preserve formatting where practical.
+- Preserve existing identifiers, labels, quoting, indentation and line order unless the instruction requires changing them.
 - Make the smallest possible changes to satisfy the request.
 - Never use Markdown code fences.
 - Never explain the changes.
-- Never wrap the output in any formatting.
-- No spaces inside edge label pipes`;
+- Never wrap the output in any formatting.`;
 
 /**
  * Composes the system prompt from a single base of rules plus conditional sections:
@@ -302,7 +312,9 @@ Use the current text summary to better understand the diagram's purpose and mean
     );
   }
 
-  if (includeSyntaxGuide) {
+  // When the type is unknown, assert nothing and inject nothing type-specific:
+  // a confidently wrong type is worse for the model than no type at all.
+  if (diagramType && includeSyntaxGuide) {
     parts.push(
       `The diagram is of type "${diagramType}". Use this syntax reference for that diagram type:
 
@@ -311,6 +323,10 @@ ${DIAGRAM_SYNTAX_GUIDES[diagramType]}`
   }
 
   parts.push(BASE_RULES);
+
+  if (diagramType) {
+    parts.push(DIAGRAM_RULES[diagramType]);
+  }
 
   if (generateSummary) {
     parts.push(
@@ -331,7 +347,8 @@ ${SUMMARY_DELIMITER}
 export function buildAskSystemPrompt(options: {
   includeSummary?: boolean;
   includeSyntaxGuide?: boolean;
-  diagramType: DiagramType;
+  /** null when the type could not be determined — see tryGetDiagramType. */
+  diagramType: DiagramType | null;
 }): string {
   const { includeSummary, includeSyntaxGuide, diagramType } = options;
   const parts: string[] = [];
@@ -346,10 +363,12 @@ export function buildAskSystemPrompt(options: {
     );
   }
 
-  if (includeSyntaxGuide) {
+  // Ask mode only reads the diagram, so the write-side DIAGRAM_RULES are not
+  // injected here — just the reference guide, and only when the type is known.
+  if (diagramType && includeSyntaxGuide) {
     parts.push(
       `The diagram is of type "${diagramType}". Use this syntax reference for that diagram type to help you interpret the diagram:
- 
+
 ${DIAGRAM_SYNTAX_GUIDES[diagramType]}`
     );
   }
@@ -421,49 +440,94 @@ export const ALL_DIAGRAM_TYPES: DiagramType[] = [
 	'treeView',
 ];
 
-export function getDiagramType(mermaidCode: string): DiagramType {
-	const firstLine = mermaidCode.trim().split('\n')[0] || '';
+/**
+ * Diagram directives in match order.
+ *
+ * IMPORTANT: no directive may appear before another that it is a prefix of,
+ * because matching takes the first hit. 'stateDiagram-v2' must precede
+ * 'stateDiagram', and 'requirementDiagram' must precede 'requirement'.
+ * diagramTypes.test.ts enforces this ordering.
+ */
+export const DIAGRAM_DIRECTIVES: ReadonlyArray<{ directive: string; type: DiagramType }> = [
+	{ directive: 'flowchart', type: 'flowchart' },
+	{ directive: 'graph', type: 'flowchart' },
+	{ directive: 'sequenceDiagram', type: 'sequenceDiagram' },
+	{ directive: 'classDiagram', type: 'classDiagram' },
+	{ directive: 'stateDiagram-v2', type: 'stateDiagram-v2' },
+	{ directive: 'stateDiagram', type: 'stateDiagram-v2' },
+	{ directive: 'erDiagram', type: 'erDiagram' },
+	{ directive: 'gantt', type: 'gantt' },
+	{ directive: 'pie', type: 'pie' },
+	{ directive: 'gitGraph', type: 'gitgraph' },
+	{ directive: 'journey', type: 'journey' },
+	{ directive: 'mindmap', type: 'mindmap' },
+	{ directive: 'timeline', type: 'timeline' },
+	{ directive: 'sankey', type: 'sankey' },
+	{ directive: 'swimlane', type: 'swimlane' },
+	{ directive: 'quadrantChart', type: 'quadrantChart' },
+	{ directive: 'requirementDiagram', type: 'requirement' },
+	{ directive: 'requirement', type: 'requirement' },
+	{ directive: 'C4Context', type: 'c4' },
+	{ directive: 'C4Container', type: 'c4' },
+	{ directive: 'C4Component', type: 'c4' },
+	{ directive: 'C4Dynamic', type: 'c4' },
+	{ directive: 'C4Deployment', type: 'c4' },
+	{ directive: 'xychart', type: 'xychart' },
+	{ directive: 'block', type: 'block' },
+	{ directive: 'packet', type: 'packet' },
+	{ directive: 'kanban', type: 'kanban' },
+	{ directive: 'architecture', type: 'architecture' },
+	{ directive: 'radar', type: 'radar' },
+	{ directive: 'eventmodeling', type: 'eventmodeling' },
+	{ directive: 'treemap', type: 'treemap' },
+	{ directive: 'venn', type: 'venn' },
+	{ directive: 'ishikawa', type: 'ishikawa' },
+	{ directive: 'wardley', type: 'wardley' },
+	{ directive: 'cynefin', type: 'cynefin' },
+	{ directive: 'treeView', type: 'treeView' },
+];
+
+/**
+ * Strips everything Mermaid allows before the diagram directive: a BOM, a YAML
+ * frontmatter block, %% comments and %%{init: ...}%% directives, and blank lines.
+ *
+ * Known limitation: an init directive split across several lines is legal but
+ * rare, and this line-based strip leaves its trailing `}%%` behind. Reporting an
+ * unknown type there is the correct degradation.
+ */
+function stripPreamble(mermaidCode: string): string {
+	return mermaidCode
+		.replace(/^﻿/, '')
+		.replace(/^\s*---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, '')
+		.replace(/^(?:[ \t]*(?:%%[^\n]*)?\r?\n)*/, '')
+		.trimStart();
+}
+
+/**
+ * Detects the diagram type, or returns null when it cannot be determined.
+ *
+ * Prefer this over getDiagramType anywhere a wrong answer is worse than no
+ * answer — notably the system prompt, which would otherwise assert a diagram
+ * type and inject a syntax guide for a type the diagram is not.
+ */
+export function tryGetDiagramType(mermaidCode: string): DiagramType | null {
+	const firstLine = stripPreamble(mermaidCode).split('\n')[0] || '';
 	const lowerFirstLine = firstLine.toLowerCase();
-	const known: Array<{ directive: string; type: DiagramType }> = [
-		{ directive: 'flowchart', type: 'flowchart' },
-		{ directive: 'graph', type: 'flowchart' },
-		{ directive: 'sequenceDiagram', type: 'sequenceDiagram' },
-		{ directive: 'classDiagram', type: 'classDiagram' },
-		{ directive: 'stateDiagram-v2', type: 'stateDiagram-v2' },
-		{ directive: 'stateDiagram', type: 'stateDiagram-v2' },
-		{ directive: 'erDiagram', type: 'erDiagram' },
-		{ directive: 'gantt', type: 'gantt' },
-		{ directive: 'pie', type: 'pie' },
-		{ directive: 'gitGraph', type: 'gitgraph' },
-		{ directive: 'journey', type: 'journey' },
-		{ directive: 'mindmap', type: 'mindmap' },
-		{ directive: 'timeline', type: 'timeline' },
-		{ directive: 'sankey', type: 'sankey' },
-		{ directive: 'swimlane', type: 'swimlane' },
-		{ directive: 'quadrantChart', type: 'quadrantChart' },
-		{ directive: 'requirementDiagram', type: 'requirement' },
-		{ directive: 'requirement', type: 'requirement' },
-		{ directive: 'C4Context', type: 'c4' },
-		{ directive: 'C4Container', type: 'c4' },
-		{ directive: 'C4Component', type: 'c4' },
-		{ directive: 'C4Dynamic', type: 'c4' },
-		{ directive: 'C4Deployment', type: 'c4' },
-		{ directive: 'xychart', type: 'xychart' },
-		{ directive: 'block', type: 'block' },
-		{ directive: 'packet', type: 'packet' },
-		{ directive: 'kanban', type: 'kanban' },
-		{ directive: 'architecture', type: 'architecture' },
-		{ directive: 'radar', type: 'radar' },
-		{ directive: 'eventmodeling', type: 'eventmodeling' },
-		{ directive: 'treemap', type: 'treemap' },
-		{ directive: 'venn', type: 'venn' },
-		{ directive: 'ishikawa', type: 'ishikawa' },
-		{ directive: 'wardley', type: 'wardley' },
-		{ directive: 'cynefin', type: 'cynefin' },
-		{ directive: 'treeView', type: 'treeView' },
-	];
-	for (const { directive, type } of known) {
-		if (lowerFirstLine.startsWith(directive.toLowerCase())) return type;
+	for (const { directive, type } of DIAGRAM_DIRECTIVES) {
+		const lowerDirective = directive.toLowerCase();
+		if (!lowerFirstLine.startsWith(lowerDirective)) continue;
+		// Require a word boundary so 'graph' does not match 'graphSomething'.
+		// Directive suffixes like '-beta' and '-v2' are boundaries, so they still match.
+		const next = lowerFirstLine.charAt(lowerDirective.length);
+		if (next === '' || !/[a-z0-9_]/.test(next)) return type;
 	}
-	return DEFAULT_DIAGRAM_TYPE;
+	return null;
+}
+
+/**
+ * Detects the diagram type, falling back to the default when unknown.
+ * For UI surfaces (e.g. the toolbar dropdown) that must display some type.
+ */
+export function getDiagramType(mermaidCode: string): DiagramType {
+	return tryGetDiagramType(mermaidCode) ?? DEFAULT_DIAGRAM_TYPE;
 }

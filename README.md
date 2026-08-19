@@ -87,7 +87,8 @@ src/
 │   ├── mermaid.ts                  # Mermaid parse/validate/render wrappers, theme initialization
 │   ├── storage.ts                  # localStorage read/write helpers (mermaid, summary, LLM config, version history, max snapshots)
 │   └── __tests__/
-│       └── diagramTypes.test.ts    # Vitest tests: validates all 29 templates parse correctly and types are detected
+│       └── diagramTypes.test.ts    # Vitest tests: templates parse, syntax-guide examples parse, per-type rules
+│                                   # exist and never contradict their type, directive ordering, type detection
 │
 ├── types/
 │   └── index.ts                    # TypeScript types: DiagramType (29 types), ThemeMode, LlmMode, LlmConfig, LlmInteraction,
@@ -97,8 +98,10 @@ src/
 └── utils/
     ├── constants.ts                # Default templates (29 types), LLM config defaults, storage keys, system prompt builders
     │                               # (buildSystemPrompt for Action, buildAskSystemPrompt for Ask), diagram type detection
-    │                               # (getDiagramType with aliases), SUMMARY_DELIMITER, REQUEST_TIMEOUT_MS (5 min), ALL_DIAGRAM_TYPES
-    └── diagramSyntax.ts            # Concise syntax reference guides for all 29 diagram types
+    │                               # (tryGetDiagramType → type | null, getDiagramType → type with fallback, DIAGRAM_DIRECTIVES
+    │                               # aliases), SUMMARY_DELIMITER, REQUEST_TIMEOUT_MS (5 min), ALL_DIAGRAM_TYPES
+    └── diagramSyntax.ts            # DIAGRAM_SYNTAX_GUIDES (optional syntax reference per type) and
+                                    # DIAGRAM_RULES (always-injected correctness rules per type)
 ```
 
 ### Component Tree
@@ -319,17 +322,40 @@ The version history system tracks every change to your diagram, whether made man
 
 The system prompt is composed dynamically from a single base of rules plus conditional sections, eliminating redundancy:
 
-- **Base rules** — Always included (modify existing diagram only, preserve node identifiers, smallest changes, no code fences, no explanations, etc.)
+- **Base rules** — Always included; only rules that hold for *every* diagram type
+- **Per-type rules** — Always included for the detected diagram type (`DIAGRAM_RULES` in `diagramSyntax.ts`)
 - **Summary context** — Added when *Include Summary* is ON
 - **Dual output format** — Added when *LLM Generate Summary* is ON (outputs Mermaid + summary separated by `---==DIAGRAMSMITH_SUMMARY_BOUNDARY==---`)
 - **Syntax guide** — Added when *Include Syntax Guide* is ON; a concise syntax reference for the current diagram type is injected so the LLM produces valid syntax
 
-All variants enforce:
+The base rules enforce:
 - Modify the existing diagram only
-- Preserve node identifiers whenever possible
+- Preserve existing identifiers, labels, quoting, indentation and line order unless the instruction requires changing them
 - Make the smallest possible changes
 - Only change the diagram type if explicitly asked
 - No markdown code fences, no explanations
+
+### Why rules are per-type
+
+Quoting conventions genuinely differ between diagram types — Pie *requires* quoted labels, Sankey *forbids*
+quotes, and Ishikawa has no identifiers or quoting at all — so a single global rule cannot be correct for all
+29 types. Rules that only apply to some types (node ID format, quoting, edge-label pipes) therefore live in
+`DIAGRAM_RULES`, keyed by diagram type, and every entry is written so that the shipped template *and* the
+syntax guide example for that type already satisfy it. The test suite enforces that consistency.
+
+Unlike the syntax guide, per-type rules are injected regardless of the *Include Syntax Guide* toggle, since
+they are correctness constraints rather than reference material.
+
+The two layers divide cleanly: **base rules say what to preserve in the existing diagram; per-type rules say
+how to write anything new.** Restating a preservation rule per type only dilutes the prompt, so quoting
+preservation lives once in the base rules while each type states only its own convention for new text.
+
+### Unknown diagram types
+
+If the diagram type cannot be determined, the prompt asserts **no** type and injects **neither** the per-type
+rules nor the syntax guide — a confidently wrong type misleads the model more than no type at all. Detection
+(`tryGetDiagramType`) looks past YAML frontmatter, `%%{init: ...}%%` directives and `%%` comments before
+matching the diagram directive.
 
 ### Ask Mode System Prompt
 
@@ -387,6 +413,7 @@ DiagramSmith uses a comprehensive CSS custom properties system for theming. All 
 
 - **Backgrounds & Text** — `--app-bg`, `--app-text`, `--surface-bg`, `--editor-bg`, `--diagram-bg`
 - **Accent & Status** — `--accent`, `--success`, `--warning`, `--danger`
+- **Prompt FAB** — `--fab-bg`, `--fab-bg-hover`, `--fab-fg`, `--fab-ring`
 - **Borders & Panels** — `--surface-border`, `--panel-handle`, `--scrollbar-thumb`
 - **Shadows** — `--shadow-sm`, `--shadow-md`, `--shadow-lg`
 - **Syntax Colors** — `--syntax-keyword`, `--syntax-attribute`, `--syntax-operator`, `--syntax-string`, `--syntax-number`, `--syntax-comment`, `--syntax-punctuation`, `--syntax-definition`, `--syntax-attribute-value`
