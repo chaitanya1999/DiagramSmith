@@ -1,41 +1,41 @@
 import { useState, useEffect } from 'react';
 import type { LlmConfig } from '../types';
 import { Modal, Button, Form } from 'react-bootstrap';
-import { loadMaxSnapshots, saveMaxSnapshots } from '../services/storage';
 
 interface SettingsDialogProps {
   show: boolean;
   config: LlmConfig;
+  maxSnapshots: number;
   onSave: (config: LlmConfig) => void;
+  onMaxSnapshotsChange: (max: number) => void;
   onCancel: () => void;
 }
 
-export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialogProps) {
+export function SettingsDialog({ show, config, maxSnapshots: currentMaxSnapshots, onSave, onMaxSnapshotsChange, onCancel }: SettingsDialogProps) {
   const [baseUrl, setBaseUrl] = useState(config.baseUrl);
   const [apiKey, setApiKey] = useState(config.apiKey);
   const [model, setModel] = useState(config.model);
   const [temperature, setTemperature] = useState(config.temperature.toString());
-  const [maxTokens, setMaxTokens] = useState(config.maxTokens.toString());
   const [sendAuthorization, setSendAuthorization] = useState(config.sendAuthorization);
-  const [maxSnapshots, setMaxSnapshots] = useState(() => loadMaxSnapshots().toString());
+  const [maxSnapshots, setMaxSnapshots] = useState(() => currentMaxSnapshots.toString());
 
   useEffect(() => {
     setBaseUrl(config.baseUrl);
     setApiKey(config.apiKey);
     setModel(config.model);
     setTemperature(config.temperature.toString());
-    setMaxTokens(config.maxTokens.toString());
     setSendAuthorization(config.sendAuthorization);
-    setMaxSnapshots(loadMaxSnapshots().toString());
-  }, [config, show]);
+    setMaxSnapshots(currentMaxSnapshots.toString());
+  }, [config, currentMaxSnapshots, show]);
 
   const handleSave = () => {
     const temp = parseFloat(temperature);
-    const tokens = parseInt(maxTokens, 10);
     const snapshots = parseInt(maxSnapshots, 10);
 
+    // Routed through the version-history hook so the new cap applies immediately;
+    // writing straight to storage left the running hook on its old value until reload.
     if (!isNaN(snapshots) && snapshots >= 1 && snapshots <= 50) {
-      saveMaxSnapshots(snapshots);
+      onMaxSnapshotsChange(snapshots);
     }
 
     onSave({
@@ -43,7 +43,6 @@ export function SettingsDialog({ show, config, onSave, onCancel }: SettingsDialo
       apiKey: apiKey.trim(),
       model: model.trim(),
       temperature: isNaN(temp) ? 0.3 : Math.min(2, Math.max(0, temp)),
-      maxTokens: isNaN(tokens) ? 2048 : Math.max(1, tokens),
       sendAuthorization,
     });
   };

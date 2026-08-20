@@ -1,9 +1,11 @@
 import { useState, useCallback } from 'react';
 
+export type ToastVariant = 'success' | 'danger' | 'warning' | 'info';
+
 export interface ToastMessage {
   id: number;
   text: string;
-  variant: 'success' | 'danger' | 'info';
+  variant: ToastVariant;
 }
 
 let toastIdCounter = 0;
@@ -11,7 +13,7 @@ let toastIdCounter = 0;
 export function useToasts() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const addToast = useCallback((text: string, variant: 'success' | 'danger' | 'info' = 'info') => {
+  const addToast = useCallback((text: string, variant: ToastVariant = 'info') => {
     const id = ++toastIdCounter;
     setToasts((prev) => [...prev, { id, text, variant }]);
     setTimeout(() => {

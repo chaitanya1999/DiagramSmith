@@ -1,5 +1,11 @@
 import { useState, useCallback, useRef } from 'react';
-import { editDiagram, askDiagram, LlmError } from '../services/llm';
+import {
+  editDiagram,
+  askDiagram,
+  LlmError,
+  ABORT_REASON_USER,
+  ABORT_REASON_TIMEOUT,
+} from '../services/llm';
 import type { LlmConfig } from '../types';
 import type { EditDiagramResult, AskDiagramResult } from '../services/llm';
 import { REQUEST_TIMEOUT_MS } from '../utils/constants';
@@ -40,7 +46,7 @@ export function useLLM(): UseLLMReturn {
 
   const abort = useCallback(() => {
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+      abortControllerRef.current.abort(ABORT_REASON_USER);
       abortControllerRef.current = null;
     }
     if (timeoutIdRef.current) {
@@ -50,40 +56,27 @@ export function useLLM(): UseLLMReturn {
     setIsLoading(false);
   }, []);
 
-  const generate = useCallback(
-    async (
-      currentMermaid: string,
-      instruction: string,
-      config: LlmConfig,
-      options?: {
-        includeSummary?: boolean;
-        generateSummary?: boolean;
-        currentSummary?: string;
-        includeSyntaxGuide?: boolean;
-      }
-    ): Promise<EditDiagramResult | null> => {
-      // Abort any previous request
+  /** Shared lifecycle for both modes: abort wiring, timeout, loading and error state. */
+  const runRequest = useCallback(
+    async <T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T | null> => {
       if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+        abortControllerRef.current.abort(ABORT_REASON_USER);
       }
 
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const timeoutId = setTimeout(() => controller.abort(ABORT_REASON_TIMEOUT), REQUEST_TIMEOUT_MS);
       timeoutIdRef.current = timeoutId;
 
       setIsLoading(true);
       setError(null);
       try {
-        const result = await editDiagram(currentMermaid, instruction, config, {
-          ...options,
-          signal: controller.signal,
-        });
-        return result;
+        return await fn(controller.signal);
       } catch (e) {
         if (e instanceof LlmError) {
-          setError(e.message);
+          // Cancelling is something the user did on purpose — not an error to report.
+          if (e.code !== 'cancelled') setError(e.message);
         } else {
           setError('Unexpected error occurred.');
         }
@@ -100,8 +93,24 @@ export function useLLM(): UseLLMReturn {
     []
   );
 
+  const generate = useCallback(
+    (
+      currentMermaid: string,
+      instruction: string,
+      config: LlmConfig,
+      options?: {
+        includeSummary?: boolean;
+        generateSummary?: boolean;
+        currentSummary?: string;
+        includeSyntaxGuide?: boolean;
+      }
+    ): Promise<EditDiagramResult | null> =>
+      runRequest((signal) => editDiagram(currentMermaid, instruction, config, { ...options, signal })),
+    [runRequest]
+  );
+
   const ask = useCallback(
-    async (
+    (
       currentMermaid: string,
       question: string,
       config: LlmConfig,
@@ -110,43 +119,9 @@ export function useLLM(): UseLLMReturn {
         currentSummary?: string;
         includeSyntaxGuide?: boolean;
       }
-    ): Promise<AskDiagramResult | null> => {
-      // Abort any previous request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-      timeoutIdRef.current = timeoutId;
-
-      setIsLoading(true);
-      setError(null);
-      try {
-        const result = await askDiagram(currentMermaid, question, config, {
-          ...options,
-          signal: controller.signal,
-        });
-        return result;
-      } catch (e) {
-        if (e instanceof LlmError) {
-          setError(e.message);
-        } else {
-          setError('Unexpected error occurred.');
-        }
-        return null;
-      } finally {
-        clearTimeout(timeoutId);
-        timeoutIdRef.current = null;
-        if (abortControllerRef.current === controller) {
-          abortControllerRef.current = null;
-        }
-        setIsLoading(false);
-      }
-    },
-    []
+    ): Promise<AskDiagramResult | null> =>
+      runRequest((signal) => askDiagram(currentMermaid, question, config, { ...options, signal })),
+    [runRequest]
   );
 
   const clearError = useCallback(() => setError(null), []);

@@ -10,6 +10,7 @@ interface VersionHistoryDialogProps {
   onRestore: (index: number) => void;
   onClose: () => void;
   onClearHistory: () => void;
+  onClearAllHistory: () => void;
   theme: ThemeMode;
 }
 
@@ -28,6 +29,7 @@ export function VersionHistoryDialog({
   onRestore,
   onClose,
   onClearHistory,
+  onClearAllHistory,
   theme,
 }: VersionHistoryDialogProps) {
   const [expandedSnapshot, setExpandedSnapshot] = useState<string | null>(null);
@@ -193,6 +195,20 @@ export function VersionHistoryDialog({
           }}
         >
           🗑️ Clear All (Keep Current)
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          disabled={snapshots.length === 0}
+          onClick={() => {
+            if (window.confirm('Are you sure you want to delete the entire version history, including the current version? Your diagram will not be changed. This cannot be undone.')) {
+              setExpandedSnapshot(null);
+              setDiffSnapshotId(null);
+              onClearAllHistory();
+            }
+          }}
+        >
+          🗑️ Clear Everything
         </Button>
         <Button variant="secondary" onClick={onClose}>
           Close

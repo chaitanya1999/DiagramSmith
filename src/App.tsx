@@ -16,6 +16,11 @@ import { useDiagramType } from './hooks/useDiagramType';
 import { useVersionHistory } from './hooks/useVersionHistory';
 import { loadLlmConfig, saveLlmConfig } from './services/storage';
 import type { LlmConfig, DiagramType, LlmMode, LlmInteraction } from './types';
+import { DIAGRAM_DISPLAY_NAMES } from './types';
+
+/** Shown when the provider cut the response short (token cap or content filter). */
+const TRUNCATED_RESPONSE_MESSAGE =
+  "The model's response was cut short by the provider. Try a smaller change.";
 
 export default function App() {
   const [isSplitView, setIsSplitView] = useState(true);
@@ -30,12 +35,12 @@ export default function App() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
   const lastPromptRef = useRef('');
-  const llmBusyCounterRef = useRef(0);
-  const restoringRef = useRef(false);
 
   const { toasts, addToast, removeToast } = useToasts();
   const { theme, toggleTheme, isDark } = useTheme();
   const { diagramType, changeDiagramType, detectDiagramType } = useDiagramType();
+
+  const handleStorageError = useCallback((message: string) => addToast(message, 'danger'), [addToast]);
 
   const {
     currentMermaid,
@@ -50,19 +55,74 @@ export default function App() {
     importMermaid,
     importDocument,
     setMermaidDirectly,
-  } = useMermaid();
+  } = useMermaid(handleStorageError);
 
   const { isLoading, error: llmError, generate, ask, clearError, abort } = useLLM();
 
-  const versionHistory = useVersionHistory();
   const {
     snapshots,
     activeIndex,
+    maxSnapshots,
     handleManualEdit,
     handleLlmGenerate,
+    handleReplaceDocument,
     restoreToIndex,
+    setMaxSnapshots,
+    resetHistory,
     clearHistoryKeepCurrent,
-  } = versionHistory;
+  } = useVersionHistory(handleStorageError);
+
+  // Latest values for the debounced callbacks, so they don't need to be recreated
+  // (and their pending timers invalidated) on every keystroke.
+  const summaryRef = useRef(summary);
+  summaryRef.current = summary;
+  const currentMermaidRef = useRef(currentMermaid);
+  currentMermaidRef.current = currentMermaid;
+  const snapshotsRef = useRef(snapshots);
+  snapshotsRef.current = snapshots;
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
+
+  /** Set once the user has agreed to discard snapshots ahead of the restored one. */
+  const discardFutureConfirmedRef = useRef(false);
+
+  /**
+   * Asked *before* the edit is applied. The old implementation prompted from an
+   * effect, which runs after the change has already been written to localStorage —
+   * so "Cancel" could only undo the edit, never prevent it.
+   */
+  const confirmDiscardFuture = useCallback((): boolean => {
+    const viewingPast = activeIndexRef.current >= 0 && activeIndexRef.current < snapshotsRef.current.length - 1;
+    if (!viewingPast || discardFutureConfirmedRef.current) return true;
+
+    const confirmed = window.confirm(
+      'You are editing a past snapshot. This will discard all future snapshots. Continue?'
+    );
+    if (confirmed) discardFutureConfirmedRef.current = true;
+    return confirmed;
+  }, []);
+
+  // Snapshots are recorded by whoever caused the change, because only the caller
+  // knows *why* the diagram changed. Watching state instead meant guessing the cause
+  // from mutable refs, which is how every LLM generation ended up also recording a
+  // redundant "manual" snapshot.
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const summaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Commits any pending debounced edit immediately, before the document is replaced. */
+  const flushPendingEdits = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (summaryTimerRef.current) {
+      clearTimeout(summaryTimerRef.current);
+      summaryTimerRef.current = null;
+    }
+    if (snapshotsRef.current.length > 0) {
+      handleManualEdit(currentMermaidRef.current, summaryRef.current);
+    }
+  }, [handleManualEdit]);
 
   const handleToggleSplitView = useCallback(() => {
     setIsSplitView((prev) => !prev);
@@ -92,13 +152,29 @@ export default function App() {
 
   const handleNewDiagram = useCallback(
     (type: DiagramType) => {
+      const name = DIAGRAM_DISPLAY_NAMES[type];
+      // This replaces the whole document and blanks the summary — too destructive
+      // to happen from a single dropdown click without asking.
+      if (
+        !window.confirm(
+          `Start a new ${name} diagram?\n\nThe current diagram and summary will be replaced. Your current work is kept in Version History.`
+        )
+      ) {
+        return;
+      }
+
+      // Commit whatever is still sitting in the debounce before replacing it.
+      flushPendingEdits();
+
       const template = changeDiagramType(type);
       setMermaidDirectly(template);
       setSummary('');
       detectDiagramType(template);
-      addToast(`New ${type} diagram created.`, 'info');
+      discardFutureConfirmedRef.current = false;
+      handleReplaceDocument(template, '', `New ${name} diagram`);
+      addToast(`New ${name} diagram created.`, 'info');
     },
-    [changeDiagramType, setMermaidDirectly, setSummary, detectDiagramType, addToast]
+    [changeDiagramType, setMermaidDirectly, setSummary, detectDiagramType, addToast, flushPendingEdits, handleReplaceDocument]
   );
 
   const handleExportMermaid = useCallback(() => {
@@ -137,9 +213,12 @@ export default function App() {
         return false;
       }
       const newSummary = typeof parsed.summary === 'string' ? parsed.summary : '';
+      flushPendingEdits();
       const success = await importDocument(parsed.mermaid, newSummary);
       if (success) {
         detectDiagramType(parsed.mermaid);
+        discardFutureConfirmedRef.current = false;
+        handleReplaceDocument(parsed.mermaid, newSummary, 'Imported project');
         addToast('Project imported successfully.', 'success');
       } else {
         addToast('Invalid Mermaid diagram in project file.', 'danger');
@@ -149,7 +228,19 @@ export default function App() {
       addToast('Invalid project file format.', 'danger');
       return false;
     }
-  }, [importDocument, detectDiagramType, addToast]);
+  }, [importDocument, detectDiagramType, addToast, flushPendingEdits, handleReplaceDocument]);
+
+  /** `.mmd` import — replaces the diagram but leaves the summary alone. */
+  const handleImportMermaid = useCallback(async (content: string): Promise<boolean> => {
+    flushPendingEdits();
+    const success = await importMermaid(content);
+    if (success) {
+      detectDiagramType(content);
+      discardFutureConfirmedRef.current = false;
+      handleReplaceDocument(content, summaryRef.current, 'Imported .mmd');
+    }
+    return success;
+  }, [importMermaid, detectDiagramType, flushPendingEdits, handleReplaceDocument]);
 
   const handlePromptSubmit = useCallback(
     async (instruction: string) => {
@@ -157,6 +248,8 @@ export default function App() {
         addToast('Please configure your API key in Settings first.', 'danger');
         return;
       }
+      // Generating from a restored snapshot discards the ones after it, same as typing.
+      if (!confirmDiscardFuture()) return;
       clearError();
 
       const effectiveIncludeSummary = includeSummary && summary.length > 0;
@@ -171,6 +264,12 @@ export default function App() {
 
       if (result === null) return;
 
+      // Surface truncation up front — it explains anything odd downstream (a
+      // half-finished diagram, or a summary that was left untouched).
+      if (result.truncated) {
+        addToast(TRUNCATED_RESPONSE_MESSAGE, 'warning');
+      }
+
       // Record the interaction for the history popup
       setLastInteraction({
         mode: 'action',
@@ -184,37 +283,39 @@ export default function App() {
       // so detect its diagram type regardless of validity to keep the toolbar in sync.
       detectDiagramType(result.mermaid);
 
-      // Increment the LLM busy counter so the currentMermaid effect doesn't
-      // record a manual snapshot while the LLM update is in flight.
-      llmBusyCounterRef.current++;
-
-      try {
-        if (effectiveGenerateSummary) {
-          // LLM returned both mermaid and summary
-          const valid = await updateFromLlmWithSummary(result.mermaid, result.summary || '');
-          if (valid) {
-            // Record LLM snapshot in version history
-            handleLlmGenerate(result.mermaid, result.summary || '', instruction);
-            addToast('Diagram and summary updated successfully.', 'success');
-          } else {
-            addToast('LLM returned invalid Mermaid. The output was loaded into the editor — check the parse error and fix it.', 'danger');
+      if (effectiveGenerateSummary) {
+        // LLM returned mermaid, and a summary only if `result.summary` is non-null.
+        const valid = await updateFromLlmWithSummary(result.mermaid, result.summary);
+        if (valid) {
+          // Record LLM snapshot in version history. When no summary came back,
+          // the existing one was retained, so that is what the snapshot carries.
+          handleLlmGenerate(result.mermaid, result.summary || summary, instruction);
+          if (!result.truncated) {
+            addToast(
+              result.summary
+                ? 'Diagram and summary updated successfully.'
+                : 'Diagram updated successfully. Existing summary kept.',
+              'success'
+            );
           }
         } else {
-          // LLM returned only mermaid
-          const valid = await updateFromLlm(result.mermaid);
-          if (valid) {
-            // Record LLM snapshot in version history
-            handleLlmGenerate(result.mermaid, summary, instruction);
-            addToast('Diagram updated successfully.', 'success');
-          } else {
-            addToast('LLM returned invalid Mermaid. The output was loaded into the editor — check the parse error and fix it.', 'danger');
-          }
+          addToast('LLM returned invalid Mermaid. The output was loaded into the editor — check the parse error and fix it.', 'danger');
         }
-      } finally {
-        llmBusyCounterRef.current--;
+      } else {
+        // LLM returned only mermaid
+        const valid = await updateFromLlm(result.mermaid);
+        if (valid) {
+          // Record LLM snapshot in version history
+          handleLlmGenerate(result.mermaid, summary, instruction);
+          if (!result.truncated) {
+            addToast('Diagram updated successfully.', 'success');
+          }
+        } else {
+          addToast('LLM returned invalid Mermaid. The output was loaded into the editor — check the parse error and fix it.', 'danger');
+        }
       }
     },
-    [currentMermaid, llmConfig, includeSummary, generateSummary, includeSyntaxGuide, summary, generate, clearError, updateFromLlm, updateFromLlmWithSummary, addToast, detectDiagramType, handleLlmGenerate]
+    [currentMermaid, llmConfig, includeSummary, generateSummary, includeSyntaxGuide, summary, generate, clearError, updateFromLlm, updateFromLlmWithSummary, addToast, detectDiagramType, handleLlmGenerate, confirmDiscardFuture]
   );
 
   const handleAskSubmit = useCallback(
@@ -234,6 +335,10 @@ export default function App() {
       });
 
       if (result === null) return;
+
+      if (result.truncated) {
+        addToast(TRUNCATED_RESPONSE_MESSAGE, 'warning');
+      }
 
       // Record the interaction and auto-open the history popup to show the answer
       setLastInteraction({
@@ -266,10 +371,11 @@ export default function App() {
   const handleRestoreSnapshot = useCallback((index: number) => {
     const snapshot = restoreToIndex(index);
     if (snapshot) {
-      restoringRef.current = true;
       setMermaidDirectly(snapshot.mermaid);
       setSummary(snapshot.summary);
       detectDiagramType(snapshot.mermaid);
+      // A fresh restore means the next edit must ask again before discarding.
+      discardFutureConfirmedRef.current = false;
       addToast(`Restored to version #${index + 1}.`, 'info');
     }
   }, [restoreToIndex, setMermaidDirectly, setSummary, detectDiagramType, addToast]);
@@ -282,59 +388,44 @@ export default function App() {
     }
   }, [llmError, addToast, clearError]);
 
-  // Debounced editor updates
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleEditorChange = useCallback(
     (value: string) => {
+      if (!confirmDiscardFuture()) {
+        // Revert the editor to the snapshot being viewed.
+        const active = snapshotsRef.current[activeIndexRef.current];
+        if (active) setEditorMermaid(active.mermaid);
+        return;
+      }
       setEditorMermaid(value);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = setTimeout(() => {
-        updateFromEditor(value);
+      debounceTimerRef.current = setTimeout(async () => {
+        const valid = await updateFromEditor(value);
         detectDiagramType(value);
+        // Only snapshot what parses — an invalid draft is kept in the editor but is
+        // not a version worth returning to.
+        if (valid) handleManualEdit(value, summaryRef.current);
       }, 400);
     },
-    [setEditorMermaid, updateFromEditor, detectDiagramType]
+    [setEditorMermaid, updateFromEditor, detectDiagramType, handleManualEdit, confirmDiscardFuture]
   );
 
-  // Track when manual edit is validated and record snapshot.
-  // We skip snapshot recording when:
-  //  - restoringRef is true (during restore, handleRestoreSnapshot sets it)
-  //  - llmBusyCounterRef > 0 (during LLM update, handleLlmGenerate is called explicitly)
-  const prevCurrentMermaidRef = useRef(currentMermaid);
-  const pendingEditRef = useRef(false);
-  useEffect(() => {
-    if (prevCurrentMermaidRef.current !== currentMermaid) {
-      prevCurrentMermaidRef.current = currentMermaid;
-      if (!restoringRef.current && llmBusyCounterRef.current === 0) {
-        // If we are in a restored state (activeIndex < last index), prompt user before discarding future snapshots
-        if (activeIndex < snapshots.length - 1 && !pendingEditRef.current) {
-          pendingEditRef.current = true;
-          const confirmed = window.confirm(
-            'You are editing a past snapshot. This will discard all future snapshots. Continue?'
-          );
-          pendingEditRef.current = false;
-          if (!confirmed) {
-            // User canceled - restore back to the latest snapshot
-            const latestSnapshot = snapshots[snapshots.length - 1];
-            if (latestSnapshot) {
-              restoringRef.current = true;
-              setMermaidDirectly(latestSnapshot.mermaid);
-              setSummary(latestSnapshot.summary);
-              // Also restore the activeIndex back
-              restoreToIndex(snapshots.length - 1);
-            }
-            return;
-          }
-        }
-        handleManualEdit(currentMermaid, summary);
-      }
-      restoringRef.current = false;
-    }
-  }, [currentMermaid, summary, handleManualEdit, activeIndex, snapshots, setMermaidDirectly, setSummary, restoreToIndex]);
+  const handleSummaryChange = useCallback(
+    (value: string) => {
+      if (!confirmDiscardFuture()) return;
+      setSummary(value);
+      if (summaryTimerRef.current) clearTimeout(summaryTimerRef.current);
+      summaryTimerRef.current = setTimeout(() => {
+        handleManualEdit(currentMermaidRef.current, value);
+      }, 400);
+    },
+    [setSummary, handleManualEdit, confirmDiscardFuture]
+  );
+
 
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (summaryTimerRef.current) clearTimeout(summaryTimerRef.current);
     };
   }, []);
 
@@ -350,7 +441,7 @@ export default function App() {
         onExportMermaid={handleExportMermaid}
         onExportProject={handleExportProject}
         onCopyMermaid={handleCopyMermaid}
-        onImportMermaid={importMermaid}
+        onImportMermaid={handleImportMermaid}
         wordWrap={wordWrap}
         onToggleWordWrap={handleToggleWordWrap}
         onImportProject={handleImportProject}
@@ -370,7 +461,7 @@ export default function App() {
                 theme={theme}
                 wordWrap={wordWrap}
                 summary={summary}
-                onSummaryChange={setSummary}
+                onSummaryChange={handleSummaryChange}
               />
             </Panel>
             <Separator className="bg-secondary" style={{ width: '4px', cursor: 'col-resize' }} />
@@ -396,7 +487,14 @@ export default function App() {
         onIncludeSyntaxGuideChange={setIncludeSyntaxGuide}
         onAbort={abort}
       />
-      <SettingsDialog show={isSettingsOpen} config={llmConfig} onSave={handleSaveSettings} onCancel={handleCancelSettings} />
+      <SettingsDialog
+        show={isSettingsOpen}
+        config={llmConfig}
+        maxSnapshots={maxSnapshots}
+        onSave={handleSaveSettings}
+        onMaxSnapshotsChange={setMaxSnapshots}
+        onCancel={handleCancelSettings}
+      />
       <PromptHistoryDialog show={isHistoryOpen} interaction={lastInteraction} onClose={handleCloseHistory} />
       <VersionHistoryDialog
         show={isVersionHistoryOpen}
@@ -405,6 +503,7 @@ export default function App() {
         onRestore={handleRestoreSnapshot}
         onClose={handleCloseVersionHistory}
         onClearHistory={clearHistoryKeepCurrent}
+        onClearAllHistory={resetHistory}
         theme={theme}
       />
 
@@ -413,7 +512,12 @@ export default function App() {
           <div key={t.id} className={`toast show align-items-center text-bg-${t.variant} border-0`} role="alert">
             <div className="d-flex">
               <div className="toast-body">{t.text}</div>
-              <button type="button" className="btn-close btn-close-white me-2 m-auto" onClick={() => removeToast(t.id)} />
+              {/* text-bg-warning is dark-on-yellow, so the white close icon would vanish. */}
+              <button
+                type="button"
+                className={`btn-close me-2 m-auto ${t.variant === 'warning' ? '' : 'btn-close-white'}`}
+                onClick={() => removeToast(t.id)}
+              />
             </div>
           </div>
         ))}

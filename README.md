@@ -22,13 +22,14 @@ The Mermaid source code is the **single source of truth** — you can edit it ma
 - **🔄 Diagram Type Auto-Detection** — The diagram type is automatically detected from the Mermaid code's first line, keeping the toolbar dropdown in sync. Supports aliases (e.g., `graph` → flowchart, `C4Context` → c4)
 - **🔀 Split View** — Side-by-side editor and rendered diagram with draggable resizable panels. Editor panel has a vertical split for Mermaid code + Text Summary.
 - **🔍 Pan & Zoom** — Scroll to zoom (from viewport center), click-and-drag to pan, with floating zoom controls including a zoom slider (30%–1000%, default 250%)
-- **🛑 Abortable Generation** — A stop button (⏹) appears in the diagram loading overlay during LLM requests; clicking it cancels the API call immediately. The Cancel button in the prompt bar also aborts the request.
+- **🛑 Abortable Generation** — A stop button (⏹) appears in the diagram loading overlay during LLM requests; clicking it cancels the API call immediately and silently (no error toast — cancelling is deliberate, not a failure).
 - **⬆️ Recall Last Prompt** — Press the Up Arrow key (↑) on an empty prompt input to pre-fill it with the last submitted prompt
 - **🌙 Dark / Light Mode** — Toggleable theme persisted to localStorage, with a comprehensive CSS custom properties theming system covering all UI elements
 - **⚙️ Bring Your Own Key** — Connect to any OpenAI-compatible LLM endpoint
 - **💾 Local Persistence** — Diagram code, text summary, LLM config, theme, diagram type, and version history saved automatically to localStorage
 - **📥 📤 Export & Import** — Export as `.mmd` file, export full project as `.dsmith.json` (includes summary), copy to clipboard, import from `.mmd` or `.dsmith.json` files (auto-detects format)
-- **⚠️ Safe by Design** — Invalid Mermaid never overwrites a valid diagram
+- **⚠️ Safe by Design** — Invalid Mermaid never overwrites a valid diagram, and an LLM response that carries no summary never overwrites the one you wrote
+- **✂️ Truncation Detection** — If the provider cuts a response short (token cap or content filter), you are told so explicitly instead of silently receiving half a diagram
 
 ---
 
@@ -67,7 +68,7 @@ src/
 │   ├── MermaidDiffView.tsx         # CodeMirror Merge side-by-side diff view (used by Version History)
 │   ├── PromptBar.tsx               # Floating bottom-center prompt with Action/Ask mode toggle + summary/syntax toggles
 │   ├── Toolbar.tsx                 # Top toolbar: split view, word wrap, diagram type, import/export, theme, versions, history, settings
-│   ├── SettingsDialog.tsx          # LLM configuration modal (Base URL, API Key, Model, Temperature, Max Tokens) + Max Snapshots
+│   ├── SettingsDialog.tsx          # LLM configuration modal (Base URL, API Key, Model, Temperature, Auth header) + Max Snapshots
 │   ├── PromptHistoryDialog.tsx     # Modal showing last prompt & LLM response (Action) or question & answer (Ask)
 │   └── VersionHistoryDialog.tsx    # Modal showing snapshot list with expand/collapse, diff, and restore
 │
@@ -77,18 +78,30 @@ src/
 │   ├── useToasts.ts                # Toast notification state management with auto-dismiss
 │   ├── useTheme.ts                 # Dark/light mode state + localStorage persistence
 │   ├── useDiagramType.ts           # Diagram type tracking + template switching + auto-detection
-│   └── useVersionHistory.ts        # Version history state: snapshot tracking, restore, max cap enforcement
+│   └── useVersionHistory.ts        # Version history state: one `commitSnapshot` helper behind three
+│                                   # recorders (manual/coalescing, LLM, document-replace), restore,
+│                                   # max cap enforcement, quota-aware persistence with oldest-first eviction
 │
 ├── services/
 │   ├── llm.ts                      # OpenAI-compatible chat completions API client (editDiagram + askDiagram)
-│   │                               # — LlmError class with error codes (invalid_key, timeout, malformed, network, unsupported)
-│   │                               # — Dual output parsing via SUMMARY_DELIMITER
-│   │                               # — Code fence stripping
+│   │                               # — callChatCompletion: single shared transport for both modes
+│   │                               # — LlmError with per-scenario codes (invalid_key, forbidden, billing, rate_limited,
+│   │                               #   server_error, timeout, cancelled, malformed_response, network_error, unsupported_model)
+│   │                               # — ABORT_REASON_USER / ABORT_REASON_TIMEOUT so cancel ≠ timeout
+│   │                               # — Truncation detection via finish_reason (length / content_filter)
+│   │                               # — Dual output parsing with a fuzzy SUMMARY_DELIMITER matcher; summary: null
+│   │                               #   when absent, so an existing summary is never overwritten
+│   │                               # — Per-half code fence stripping (stripCodeFences)
 │   ├── mermaid.ts                  # Mermaid parse/validate/render wrappers, theme initialization
-│   ├── storage.ts                  # localStorage read/write helpers (mermaid, summary, LLM config, version history, max snapshots)
+│   ├── storage.ts                  # localStorage read/write helpers (mermaid, summary, LLM config, version history,
+│   │                               # max snapshots). Writers return success/failure so quota errors are never
+│   │                               # swallowed; `loadVersionHistory` validates every rehydrated snapshot and
+│   │                               # clamps activeIndex instead of trusting a cast
 │   └── __tests__/
-│       └── diagramTypes.test.ts    # Vitest tests: templates parse, syntax-guide examples parse, per-type rules
-│                                   # exist and never contradict their type, directive ordering, type detection
+│       ├── diagramTypes.test.ts    # Vitest tests: templates parse, syntax-guide examples parse, per-type rules
+│       │                           # exist and never contradict their type, directive ordering, type detection
+│       └── llm.test.ts             # Vitest tests: dual-output parsing, fuzzy delimiter matching, fence stripping,
+│                                   # truncation flagging, HTTP error mapping, abort handling, network failures
 │
 ├── types/
 │   └── index.ts                    # TypeScript types: DiagramType (29 types), ThemeMode, LlmMode, LlmConfig, LlmInteraction,
@@ -139,7 +152,7 @@ App
 │   ├── "Include Syntax Guide" toggle
 │   └── Generate / Ask / Cancel buttons
 ├── SettingsDialog (modal)
-│   ├── LLM Configuration (Base URL, API Key, Model, Temperature slider, Max Tokens)
+│   ├── LLM Configuration (Base URL, API Key, Model, Temperature slider, Send Authorization Header)
 │   └── Version History (Max Snapshots slider, 1–50)
 ├── PromptHistoryDialog (modal)
 │   ├── Mode badge (✏️ Action / ❓ Ask)
@@ -153,6 +166,7 @@ App
     │   ├── 🔍 Diff button (opens side-by-side CodeMirror Merge diff)
     │   ├── ▼ Expand button (shows full Mermaid code + summary)
     │   └── Restore button
+    ├── 🗑️ Clear All (Keep Current) / 🗑️ Clear Everything
     └── MermaidDiffView (CodeMirror Merge — green/red line backgrounds)
 ```
 
@@ -160,10 +174,10 @@ App
 
 1. **LLM Flow (Action)**: PromptBar → `useLLM.generate()` → `services/llm.editDiagram()` → OpenAI API → validate → update state (mermaid + optional summary via `---==DIAGRAMSMITH_SUMMARY_BOUNDARY==---` delimiter) → record LLM snapshot → re-render
 2. **LLM Flow (Ask)**: PromptBar → `useLLM.ask()` → `services/llm.askDiagram()` → OpenAI API → record interaction → auto-open PromptHistoryDialog with the answer
-3. **Manual Edit Flow**: CodeMirror onChange → debounce (400ms) → `services/mermaid.validate()` → if valid: update state & record manual snapshot; if invalid: show parse error
+3. **Manual Edit Flow**: CodeMirror onChange → debounce (400ms) → `services/mermaid.validate()` → if valid: update state & record a coalescing manual snapshot; if invalid: show parse error and record nothing
 4. **Diagram Type Detection Flow**: CodeMirror onChange → debounce → validate → `getDiagramType()` (first-line matching with aliases) → update toolbar dropdown
-5. **Version History Flow**: Manual edits and LLM generations both create `DiagramSnapshot` objects. Restoring a snapshot updates the editor and sets `isRestored` state. If the user edits a restored (past) snapshot, a confirmation dialog warns that future snapshots will be truncated; on cancel the editor reverts to the latest snapshot.
-6. **Diagram Type Change**: Toolbar dropdown → `changeDiagramType(type)` → `setMermaidDirectly(template)` → immediate state update (no validation needed for known-good templates)
+5. **Version History Flow**: Every snapshot is recorded by the action that caused it — `handleManualEdit` (coalescing), `handleLlmGenerate` (always new), or `handleReplaceDocument` (always new, for type changes and imports). All three funnel into one `commitSnapshot` helper that truncates future snapshots when editing from a restored point and enforces the capacity cap.
+6. **Diagram Type Change**: Toolbar dropdown → confirmation → flush any pending edit → `changeDiagramType(type)` → `setMermaidDirectly(template)` → `handleReplaceDocument()` records the swap as its own snapshot
 
 ---
 
@@ -227,14 +241,13 @@ npm run deploy
 | **API Key** | Your API key (stored locally only). Can be left empty when using local models that don't require authentication (e.g., Ollama, LM Studio) if **Send Authorization Header** is disabled. |
 | **Model Name** | e.g., `gpt-4o-mini`, `gpt-4o`, `claude-3-sonnet` (if Anthropic-compatible proxy) |
 | **Temperature** | 0–2 (default: 0.3). Lower = more deterministic |
-| **Maximum Tokens** | Max response length (default: 2048) |
 | **Send Authorization Header** | When enabled (default), the API key is sent as a Bearer token in the `Authorization` header. Disable for local models or endpoints that don't require authentication. Persisted to localStorage. |
 
 ### Version History Settings (⚙️)
 
 | Field | Description |
 |-------|-------------|
-| **Max Snapshots** | 1–50 (default: 5). Oldest snapshots are automatically dropped when the limit is exceeded. |
+| **Max Snapshots** | 1–50 (default: 5). Oldest snapshots are automatically dropped when the limit is exceeded. Takes effect immediately on save — no reload required. |
 
 ### Prompt Options
 
@@ -294,15 +307,34 @@ The version history system tracks every change to your diagram, whether made man
 - **Side-by-Side Diff** — Click the 🔍 Diff button on any snapshot to see a CodeMirror Merge view comparing that snapshot against the current version, with red (deletion) and green (insertion) line highlighting
 - **Expand to View** — Click ▼ to expand a snapshot and view the full Mermaid code and summary at that point in time
 - **One-Click Restore** — Click "Restore" to revert the diagram to any previous snapshot. If you then make edits, a confirmation dialog warns that future snapshots will be discarded
-- **Configurable Capacity** — Set the maximum number of snapshots (1–50) in Settings. The oldest snapshots are automatically trimmed when the limit is exceeded
-- **Clear All (Keep Current)** — One-click button in the Version History modal to delete all snapshots except the current version, with a confirmation dialog to prevent accidental data loss
-- **Persistent** — All snapshots are saved to localStorage and survive page reloads
+- **Configurable Capacity** — Set the maximum number of snapshots (1–50) in Settings. The oldest snapshots are automatically trimmed when the limit is exceeded. Changes take effect immediately, without a reload
+- **Clear All (Keep Current)** — Deletes every snapshot except the current version, with a confirmation dialog
+- **Clear Everything** — Deletes the entire history including the current version. Your diagram and summary are left untouched — only the history is wiped
+- **Persistent** — All snapshots are saved to localStorage and survive page reloads. Rehydrated data is validated on load: malformed snapshots are dropped and an out-of-range index is clamped, rather than crashing the app on every reload
+- **Quota-aware** — If browser storage fills up, the oldest snapshots are shed to make room and you are told. Storage failures are never silent
 
 ### How Snapshots Work
 
-- **Manual edits** that pass validation update the latest manual snapshot in-place (to avoid noise from keystroke-level changes). If the latest snapshot is an LLM snapshot, a new manual snapshot is created.
-- **LLM generations** always create a new snapshot.
-- **Restoring** a past snapshot and then editing triggers a confirmation: "You are editing a past snapshot. This will discard all future snapshots. Continue?" If accepted, future snapshots are truncated. If cancelled, the editor reverts to the latest snapshot.
+Two rules cover everything:
+
+1. **An AI generation is always its own snapshot.**
+2. **A run of consecutive manual edits collapses into one snapshot**, so keystrokes don't flood the history. Manual edits to the Mermaid code *and* to the Text Summary both count, and both coalesce together.
+
+Which gives:
+
+| Sequence | Snapshots |
+|----------|-----------|
+| AI → AI | 2 |
+| AI → manual | 2 |
+| manual → AI | 2 |
+| manual → manual | 1 |
+| AI → manual → manual → manual → AI | 3 |
+
+- **Only valid Mermaid is snapshotted.** An unparseable draft stays in the editor but is not a version worth returning to.
+- **Document replacements** — switching diagram type, or importing a file — always push a new snapshot rather than coalescing, so the work being replaced stays recoverable. Any pending edit is committed first.
+- **Restoring** a past snapshot and then editing (by typing *or* by generating) asks first: "You are editing a past snapshot. This will discard all future snapshots. Continue?" The prompt appears **before** the change is applied, and is asked once per restore.
+
+Snapshots are recorded by whichever action caused the change rather than by watching state, so the cause is always known exactly — a state watcher cannot tell an AI update apart from a manual one.
 
 ---
 
@@ -393,17 +425,33 @@ Syntax colors are themed via CSS custom properties (see [CSS Theming](#css-themi
 
 ## Error Handling
 
-| Scenario | Behavior |
-|----------|----------|
-| Request cancelled | Loading overlay removed immediately; no toast shown |
-| Invalid API key | `LlmError` with code `invalid_key` → Toast error: "Invalid API key. Please check your settings." |
-| Network error | `LlmError` with code `network_error` → Toast error: "Network error. Please check your Base URL and ensure the API is reachable." |
-| Network timeout (5 min) | `LlmError` with code `timeout` → Toast error: "Request cancelled." |
-| LLM returns invalid Mermaid | Output is loaded into the editor with the parse error shown; the last valid diagram remains rendered; toast error shown |
-| Malformed LLM response | Code fences stripped automatically; dual output parsed via `---==DIAGRAMSMITH_SUMMARY_BOUNDARY==---` delimiter; toast error on empty response |
-| Empty LLM response | `LlmError` with code `malformed_response` → Toast error |
-| Mermaid parse error in editor | Error shown in editor footer |
-| Mermaid render failure | "⚠ Render Error" displayed in diagram panel |
+All API failures are raised as an `LlmError` carrying a `code`, so each scenario gets a message that
+names the actual problem instead of funnelling everything into a generic network error.
+
+| Scenario | Code | Behavior |
+|----------|------|----------|
+| Request cancelled (⏹) | `cancelled` | Loading overlay removed immediately; **no toast** — cancelling is deliberate |
+| Request timeout (5 min) | `timeout` | Toast: "Request timed out. The model took too long to respond." |
+| Invalid API key (401) | `invalid_key` | Toast: "Invalid API key. Please check your settings." |
+| Billing / credits (402) | `billing` | Toast: "Billing issue — check your account credits." |
+| No access to model (403) | `forbidden` | Toast: "Access denied — your API key may not have access to this model." |
+| Not found (404) | `network_error` | Toast: "Not found (404) — check the Base URL and the model name." |
+| Rate limited (429) | `rate_limited` | Toast: "Rate limited — wait a moment and try again." |
+| Provider outage (5xx) | `server_error` | Toast names the status and states it is not the user's configuration |
+| Temperature rejected (400) | `unsupported_model` | Toast suggests setting Temperature to 1 — reasoning models accept only the default |
+| Unreachable endpoint | `network_error` | Any `TypeError` from `fetch` is treated as a network failure (covers Chrome, Firefox **and** Safari's `"Load failed"`) |
+| HTTP 200 with an error body | `network_error` | The provider's own message is surfaced (common with Ollama / LM Studio) rather than "empty response" |
+| Non-JSON response body | `malformed_response` | Toast: the endpoint is not an OpenAI-compatible API |
+| Empty LLM response | `malformed_response` | Toast error |
+| **Response cut short** | — | Warning toast: "The model's response was cut short by the provider." Detected via `finish_reason` (`length` / `content_filter`). The partial output is still loaded into the editor and the summary is left untouched |
+| **No summary in response** | — | The existing summary is **retained**, never overwritten. Toast: "Diagram updated successfully. Existing summary kept." |
+| LLM returns invalid Mermaid | — | Output is loaded into the editor with the parse error shown; the last valid diagram remains rendered; toast error shown |
+| Provider error bodies | — | Truncated to 200 characters before being shown, so a large JSON or HTML error page cannot fill the screen |
+| Mermaid parse error in editor | — | Error shown in editor footer |
+| Mermaid render failure | — | "⚠ Render Error" displayed in diagram panel |
+| **localStorage quota exceeded** | — | Toast error. For version history, the oldest snapshots are shed to make room first. Warned once per episode, not once per keystroke |
+| **Corrupt version history on load** | — | Malformed snapshots are dropped and `activeIndex` is clamped into range; a wholly invalid blob is discarded rather than crashing the render |
+| **Replacing the document** | — | Switching diagram type asks for confirmation first, and the replaced work is preserved as its own snapshot |
 
 ---
 
@@ -439,11 +487,41 @@ All persisted data uses the following `localStorage` keys:
 
 ## Tests
 
-The project includes a Vitest test suite in `src/services/__tests__/diagramTypes.test.ts` that validates:
+The project includes four Vitest suites (337 tests).
+
+**`src/services/__tests__/diagramTypes.test.ts`** validates:
 
 1. `ALL_DIAGRAM_TYPES` array matches the keys of `DEFAULT_TEMPLATES`
 2. Every default template parses successfully with Mermaid.js (no syntax errors)
 3. Every template's diagram type is correctly detected by `getDiagramType()`
+4. Per-type rules exist and never contradict their own type's template or syntax guide
+
+**`src/services/__tests__/llm.test.ts`** validates:
+
+1. `parseDualOutput` returns `summary: null` when the delimiter is missing — the regression test
+   guarding against an LLM response silently wiping the user's summary
+2. Near-miss delimiters (fewer dashes, extra spaces, lowercase, markdown emphasis) still split correctly
+3. Code fences are stripped from each half independently
+4. `finish_reason: length` / `content_filter` is flagged as truncated without discarding the output
+5. HTTP 401/402/403/404/429/5xx map to distinct error codes, and long error bodies are truncated
+6. HTTP 200 responses carrying an error payload surface the provider's message
+7. A deliberate cancel is reported as `cancelled`, the 5-minute timeout as `timeout`
+8. Chrome, Firefox **and** Safari network failures all map to `network_error`
+
+**`src/hooks/__tests__/versionHistory.test.ts`** validates the snapshot rules:
+
+1. The full sequencing table above (AI → AI = 2, manual → manual = 1, and so on)
+2. Consecutive manual edits coalesce and keep the newest content and the original snapshot id
+3. Document replacement pushes rather than overwriting the work being replaced
+4. Editing from a restored snapshot discards everything after it
+5. The capacity cap trims oldest-first and keeps `activeIndex` valid, down to a cap of 1
+
+**`src/services/__tests__/storage.test.ts`** validates persistence:
+
+1. Version history round-trips
+2. Malformed snapshots are dropped; a wholly invalid blob returns `null`
+3. `activeIndex` is clamped, including after entries are dropped
+4. Every writer returns `false` when the quota is exceeded
 
 Run with:
 

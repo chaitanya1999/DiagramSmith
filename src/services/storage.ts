@@ -1,5 +1,20 @@
-import type { LlmConfig, VersionHistory } from '../types';
+import type { DiagramSnapshot, LlmConfig, VersionHistory } from '../types';
 import { DEFAULT_TEMPLATES, DEFAULT_DIAGRAM_TYPE, DEFAULT_LLM_CONFIG, STORAGE_KEYS, DEFAULT_MAX_SNAPSHOTS } from '../utils/constants';
+
+/**
+ * Every writer returns whether the value actually reached localStorage. Callers must
+ * check it: a swallowed QuotaExceededError means the app keeps looking healthy while
+ * silently persisting nothing, and the user only discovers the loss on reload.
+ */
+function writeKey(key: string, value: string, label: string): boolean {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    console.error(`Failed to save ${label} to localStorage:`, e);
+    return false;
+  }
+}
 
 export function loadMermaid(): string {
   try {
@@ -10,12 +25,8 @@ export function loadMermaid(): string {
   }
 }
 
-export function saveMermaid(mermaid: string): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.MERMAID, mermaid);
-  } catch (e) {
-    console.error('Failed to save mermaid to localStorage:', e);
-  }
+export function saveMermaid(mermaid: string): boolean {
+  return writeKey(STORAGE_KEYS.MERMAID, mermaid, 'mermaid');
 }
 
 export function loadSummary(): string {
@@ -27,12 +38,8 @@ export function loadSummary(): string {
   }
 }
 
-export function saveSummary(summary: string): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.SUMMARY, summary);
-  } catch (e) {
-    console.error('Failed to save summary to localStorage:', e);
-  }
+export function saveSummary(summary: string): boolean {
+  return writeKey(STORAGE_KEYS.SUMMARY, summary, 'summary');
 }
 
 export function loadLlmConfig(): LlmConfig {
@@ -47,35 +54,55 @@ export function loadLlmConfig(): LlmConfig {
   return DEFAULT_LLM_CONFIG;
 }
 
-export function saveLlmConfig(config: LlmConfig): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.LLM_CONFIG, JSON.stringify(config));
-  } catch (e) {
-    console.error('Failed to save LLM config to localStorage:', e);
-  }
+export function saveLlmConfig(config: LlmConfig): boolean {
+  return writeKey(STORAGE_KEYS.LLM_CONFIG, JSON.stringify(config), 'LLM config');
+}
+
+/**
+ * Rehydrated snapshots are untrusted input: a `as VersionHistory` cast checks nothing
+ * at runtime, and a malformed entry or an out-of-range activeIndex crashes the render
+ * on every load — which localStorage then reproduces forever.
+ */
+function isValidSnapshot(value: unknown): value is DiagramSnapshot {
+  if (!value || typeof value !== 'object') return false;
+  const s = value as Record<string, unknown>;
+  return (
+    typeof s.id === 'string' &&
+    typeof s.timestamp === 'number' &&
+    (s.type === 'manual' || s.type === 'llm') &&
+    typeof s.prompt === 'string' &&
+    typeof s.mermaid === 'string' &&
+    typeof s.summary === 'string'
+  );
 }
 
 export function loadVersionHistory(): VersionHistory | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.VERSION_HISTORY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as VersionHistory;
-      if (Array.isArray(parsed.snapshots) && typeof parsed.activeIndex === 'number') {
-        return parsed;
-      }
-    }
+    if (!stored) return null;
+
+    const parsed: unknown = JSON.parse(stored);
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const raw = parsed as Record<string, unknown>;
+    if (!Array.isArray(raw.snapshots)) return null;
+
+    // Drop malformed entries rather than trusting the whole blob.
+    const snapshots = raw.snapshots.filter(isValidSnapshot);
+    if (snapshots.length === 0) return null;
+
+    const rawIndex = typeof raw.activeIndex === 'number' ? Math.trunc(raw.activeIndex) : snapshots.length - 1;
+    const activeIndex = Math.min(Math.max(0, rawIndex), snapshots.length - 1);
+
+    return { snapshots, activeIndex };
   } catch (e) {
     console.error('Failed to load version history from localStorage:', e);
   }
   return null;
 }
 
-export function saveVersionHistory(history: VersionHistory): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.VERSION_HISTORY, JSON.stringify(history));
-  } catch (e) {
-    console.error('Failed to save version history to localStorage:', e);
-  }
+export function saveVersionHistory(history: VersionHistory): boolean {
+  return writeKey(STORAGE_KEYS.VERSION_HISTORY, JSON.stringify(history), 'version history');
 }
 
 export function loadMaxSnapshots(): number {
@@ -93,10 +120,6 @@ export function loadMaxSnapshots(): number {
   return DEFAULT_MAX_SNAPSHOTS;
 }
 
-export function saveMaxSnapshots(max: number): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.MAX_SNAPSHOTS, String(max));
-  } catch (e) {
-    console.error('Failed to save max snapshots to localStorage:', e);
-  }
+export function saveMaxSnapshots(max: number): boolean {
+  return writeKey(STORAGE_KEYS.MAX_SNAPSHOTS, String(max), 'max snapshots');
 }
