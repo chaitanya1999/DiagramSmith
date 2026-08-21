@@ -17,6 +17,15 @@ import { useVersionHistory } from './hooks/useVersionHistory';
 import { loadLlmConfig, saveLlmConfig } from './services/storage';
 import type { LlmConfig, DiagramType, LlmMode, LlmInteraction } from './types';
 import { DIAGRAM_DISPLAY_NAMES } from './types';
+import { buildProjectFile, parseProjectFile } from './utils/projectFile';
+import {
+  canCopyImages,
+  copyPngToClipboard,
+  downloadBlob,
+  getThemeBackground,
+  svgToBlob,
+  svgToPngBlob,
+} from './utils/imageExport';
 
 /** Shown when the provider cut the response short (token cap or content filter). */
 const TRUNCATED_RESPONSE_MESSAGE =
@@ -69,8 +78,12 @@ export default function App() {
     restoreToIndex,
     setMaxSnapshots,
     resetHistory,
+    replaceHistory,
     clearHistoryKeepCurrent,
   } = useVersionHistory(handleStorageError);
+
+  /** The rendered SVG, lifted out of DiagramView so the toolbar can export it. */
+  const [renderedSvg, setRenderedSvg] = useState<string | null>(null);
 
   // Latest values for the debounced callbacks, so they don't need to be recreated
   // (and their pending timers invalidated) on every keystroke.
@@ -188,15 +201,55 @@ export default function App() {
   }, [currentMermaid]);
 
   const handleExportProject = useCallback(() => {
-    const project = JSON.stringify({ mermaid: currentMermaid, summary }, null, 2);
-    const blob = new Blob([project], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'diagram.dsmith.json';
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [currentMermaid, summary]);
+    // Carries the full working state — code, summary, type and version history — so a
+    // project file is a complete backup you can resume from, not just the diagram.
+    const project = buildProjectFile(currentMermaid, summary, diagramType, { snapshots, activeIndex });
+    downloadBlob(new Blob([project], { type: 'application/json' }), 'diagram.dsmith.json');
+  }, [currentMermaid, summary, diagramType, snapshots, activeIndex]);
+
+  const handleExportSvg = useCallback(() => {
+    if (!renderedSvg) {
+      addToast('Nothing to export — the diagram has not rendered yet.', 'danger');
+      return;
+    }
+    try {
+      downloadBlob(svgToBlob(renderedSvg, null), 'diagram.svg');
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : 'Could not export the SVG.', 'danger');
+    }
+  }, [renderedSvg, addToast]);
+
+  const handleExportPng = useCallback(
+    async (withBackground: boolean) => {
+      if (!renderedSvg) {
+        addToast('Nothing to export — the diagram has not rendered yet.', 'danger');
+        return;
+      }
+      try {
+        const blob = await svgToPngBlob(renderedSvg, withBackground ? getThemeBackground() : null);
+        downloadBlob(blob, 'diagram.png');
+      } catch (e) {
+        addToast(e instanceof Error ? e.message : 'Could not export the PNG.', 'danger');
+      }
+    },
+    [renderedSvg, addToast]
+  );
+
+  const handleCopyImage = useCallback(async () => {
+    if (!renderedSvg) {
+      addToast('Nothing to copy — the diagram has not rendered yet.', 'danger');
+      return;
+    }
+    try {
+      // Pasting a transparent PNG into a dark document looks broken, so the
+      // clipboard copy always carries the theme background.
+      const blob = await svgToPngBlob(renderedSvg, getThemeBackground());
+      await copyPngToClipboard(blob);
+      addToast('Diagram image copied to clipboard.', 'success');
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : 'Could not copy the image.', 'danger');
+    }
+  }, [renderedSvg, addToast]);
 
   const handleCopyMermaid = useCallback(() => {
     navigator.clipboard.writeText(currentMermaid).then(
@@ -206,29 +259,42 @@ export default function App() {
   }, [currentMermaid, addToast]);
 
   const handleImportProject = useCallback(async (content: string): Promise<boolean> => {
-    try {
-      const parsed = JSON.parse(content);
-      if (typeof parsed.mermaid !== 'string') {
-        addToast('Invalid project file: missing mermaid field.', 'danger');
-        return false;
-      }
-      const newSummary = typeof parsed.summary === 'string' ? parsed.summary : '';
-      flushPendingEdits();
-      const success = await importDocument(parsed.mermaid, newSummary);
-      if (success) {
-        detectDiagramType(parsed.mermaid);
-        discardFutureConfirmedRef.current = false;
-        handleReplaceDocument(parsed.mermaid, newSummary, 'Imported project');
-        addToast('Project imported successfully.', 'success');
-      } else {
-        addToast('Invalid Mermaid diagram in project file.', 'danger');
-      }
-      return success;
-    } catch {
-      addToast('Invalid project file format.', 'danger');
+    // Accepts both the current schema and the original { mermaid, summary } files.
+    const parsed = parseProjectFile(content);
+    if (!parsed) {
+      addToast('Invalid project file: could not read a diagram from it.', 'danger');
       return false;
     }
-  }, [importDocument, detectDiagramType, addToast, flushPendingEdits, handleReplaceDocument]);
+
+    // Adopting the file's history discards the one in this browser, so ask first.
+    let adoptHistory = false;
+    if (parsed.versionHistory) {
+      adoptHistory = window.confirm(
+        `This project file contains ${parsed.versionHistory.snapshots.length} saved version(s).\n\n` +
+          'Import them? This replaces the version history currently in this browser.\n\n' +
+          'Cancel imports the diagram and summary only, keeping your existing history.'
+      );
+    }
+
+    flushPendingEdits();
+    const success = await importDocument(parsed.mermaid, parsed.summary);
+    if (!success) {
+      addToast('Invalid Mermaid diagram in project file.', 'danger');
+      return false;
+    }
+
+    detectDiagramType(parsed.mermaid);
+    discardFutureConfirmedRef.current = false;
+
+    if (adoptHistory && parsed.versionHistory) {
+      replaceHistory(parsed.versionHistory);
+      addToast('Project and version history imported.', 'success');
+    } else {
+      handleReplaceDocument(parsed.mermaid, parsed.summary, 'Imported project');
+      addToast('Project imported successfully.', 'success');
+    }
+    return true;
+  }, [importDocument, detectDiagramType, addToast, flushPendingEdits, handleReplaceDocument, replaceHistory]);
 
   /** `.mmd` import — replaces the diagram but leaves the summary alone. */
   const handleImportMermaid = useCallback(async (content: string): Promise<boolean> => {
@@ -440,6 +506,11 @@ export default function App() {
         onNewDiagram={handleNewDiagram}
         onExportMermaid={handleExportMermaid}
         onExportProject={handleExportProject}
+        onExportSvg={handleExportSvg}
+        onExportPng={handleExportPng}
+        onCopyImage={handleCopyImage}
+        canCopyImage={canCopyImages()}
+        hasRenderedDiagram={renderedSvg !== null}
         onCopyMermaid={handleCopyMermaid}
         onImportMermaid={handleImportMermaid}
         wordWrap={wordWrap}
@@ -466,7 +537,7 @@ export default function App() {
             </Panel>
             <Separator className="bg-secondary" style={{ width: '4px', cursor: 'col-resize' }} />
             <Panel defaultSize={50} minSize={20}>
-              <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} isAskMode={llmMode === 'ask'} theme={theme} onAbort={abort} />
+              <DiagramView mermaidCode={currentMermaid} isLoading={isLoading} isAskMode={llmMode === 'ask'} theme={theme} onAbort={abort} summary={summary} onSvgChange={setRenderedSvg} />
             </Panel>
           </Group>
         ) : (

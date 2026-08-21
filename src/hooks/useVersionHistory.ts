@@ -13,6 +13,7 @@ interface UseVersionHistoryReturn {
   restoreToIndex: (index: number) => DiagramSnapshot | null;
   setMaxSnapshots: (max: number) => void;
   resetHistory: () => void;
+  replaceHistory: (history: VersionHistory) => void;
   clearHistoryKeepCurrent: () => void;
 }
 
@@ -177,6 +178,17 @@ export function useVersionHistory(onStorageError?: (message: string) => void): U
     setIsRestored(false);
   }, []);
 
+  /** Adopts a history wholesale — used when importing a project file that carries one. */
+  const replaceHistory = useCallback((incoming: VersionHistory) => {
+    const snapshots = incoming.snapshots.slice(-maxSnapshots);
+    const dropped = incoming.snapshots.length - snapshots.length;
+    setHistory({
+      snapshots,
+      activeIndex: Math.min(Math.max(0, incoming.activeIndex - dropped), snapshots.length - 1),
+    });
+    setIsRestored(false);
+  }, [maxSnapshots]);
+
   const clearHistoryKeepCurrent = useCallback(() => {
     const current = historyRef.current;
     if (current.snapshots.length === 0 || current.activeIndex < 0) return;
@@ -197,6 +209,7 @@ export function useVersionHistory(onStorageError?: (message: string) => void): U
     restoreToIndex,
     setMaxSnapshots: handleSetMaxSnapshots,
     resetHistory,
+    replaceHistory,
     clearHistoryKeepCurrent,
   };
 }

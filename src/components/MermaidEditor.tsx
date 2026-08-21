@@ -78,7 +78,9 @@ export function MermaidEditor({ value, onChange, parseError, theme, wordWrap, su
       view.destroy();
       viewRef.current = null;
     };
-    // Only initialize once
+    // Mount-only by design: the CodeMirror view is built once. Later changes to
+    // `value`, `theme` and `wordWrap` are applied by the effects below, because
+    // rebuilding the view would discard cursor position, selection and undo history.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

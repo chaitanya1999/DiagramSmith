@@ -5,7 +5,13 @@ export function setMermaidTheme(theme: ThemeMode): void {
   mermaid.initialize({
     startOnLoad: false,
     theme: theme === 'dark' ? 'dark' : 'default',
-    securityLevel: 'loose',
+    // 'strict' runs label text through DOMPurify and URLs through sanitize-url.
+    // Under 'loose' Mermaid does neither, so a `click X "javascript:..."` directive
+    // or raw HTML in a node label survives into the SVG — which DiagramView injects
+    // with dangerouslySetInnerHTML, giving an imported .mmd or a hostile LLM response
+    // a path to the API key in localStorage. Safe formatting (<br>, <b>, <i>) is
+    // still permitted; only `click` directives are disabled, and nothing uses them.
+    securityLevel: 'strict',
   });
 }
 

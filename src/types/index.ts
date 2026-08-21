@@ -77,6 +77,19 @@ export interface VersionHistory {
   activeIndex: number;
 }
 
+/**
+ * The `.dsmith.json` payload. `version` is what distinguishes it from the original
+ * two-field format, which had no such marker — see `parseProjectFile`.
+ */
+export interface DiagramProjectFile {
+  version: number;
+  exportedAt: string;
+  mermaid: string;
+  summary: string;
+  diagramType: DiagramType;
+  versionHistory: VersionHistory;
+}
+
 export const DIAGRAM_DISPLAY_NAMES: Record<DiagramType, string> = {
   flowchart: 'Flowchart',
   sequenceDiagram: 'Sequence',

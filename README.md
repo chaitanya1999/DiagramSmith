@@ -1,5 +1,10 @@
 # DiagramSmith
 
+[![CI](https://github.com/chaitanya1999/DiagramSmith/actions/workflows/ci.yml/badge.svg)](https://github.com/chaitanya1999/DiagramSmith/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+### ▶ [Try it live](https://chaitanya1999.github.io/DiagramSmith/)
+
 **DiagramSmith** is an AI-assisted diagram editor for Mermaid.js diagrams. Unlike one-shot AI diagram generators, DiagramSmith is designed for **iterative editing** — you describe changes in natural language, and an LLM updates the existing diagram incrementally.
 
 The Mermaid source code is the **single source of truth** — you can edit it manually, or let the AI modify it for you. No backend is required.
@@ -21,13 +26,15 @@ The Mermaid source code is the **single source of truth** — you can edit it ma
 - **📊 29 Diagram Types** — Flowchart, Sequence, Class, State, ER, Gantt, Pie, Gitgraph, Journey, Mindmap, Timeline, Sankey, Swimlanes, Quadrant, Requirement, C4, XY Chart, Block, Packet, Kanban, Architecture, Radar, Event Modeling, Treemap, Venn, Ishikawa, Wardley, Cynefin, TreeView
 - **🔄 Diagram Type Auto-Detection** — The diagram type is automatically detected from the Mermaid code's first line, keeping the toolbar dropdown in sync. Supports aliases (e.g., `graph` → flowchart, `C4Context` → c4)
 - **🔀 Split View** — Side-by-side editor and rendered diagram with draggable resizable panels. Editor panel has a vertical split for Mermaid code + Text Summary.
-- **🔍 Pan & Zoom** — Scroll to zoom (from viewport center), click-and-drag to pan, with floating zoom controls including a zoom slider (30%–1000%, default 250%)
+- **🔍 Pan & Zoom** — Scroll to zoom, click-and-drag **anywhere in the panel** to pan (not only on the diagram itself), with a zoom slider (30%–1000%) and a **fit-to-view** button. Zoom and position **survive re-renders**, so editing no longer snaps the view back after every keystroke
 - **🛑 Abortable Generation** — A stop button (⏹) appears in the diagram loading overlay during LLM requests; clicking it cancels the API call immediately and silently (no error toast — cancelling is deliberate, not a failure).
 - **⬆️ Recall Last Prompt** — Press the Up Arrow key (↑) on an empty prompt input to pre-fill it with the last submitted prompt
 - **🌙 Dark / Light Mode** — Toggleable theme persisted to localStorage, with a comprehensive CSS custom properties theming system covering all UI elements
 - **⚙️ Bring Your Own Key** — Connect to any OpenAI-compatible LLM endpoint
 - **💾 Local Persistence** — Diagram code, text summary, LLM config, theme, diagram type, and version history saved automatically to localStorage
-- **📥 📤 Export & Import** — Export as `.mmd` file, export full project as `.dsmith.json` (includes summary), copy to clipboard, import from `.mmd` or `.dsmith.json` files (auto-detects format)
+- **🖼️ Image Export** — Export the rendered diagram as **SVG** or **PNG** (2× for crisp output), with a per-export choice of a theme-matched background or transparency. **Copy image to clipboard** for pasting straight into a doc or chat
+- **📥 📤 Export & Import** — Export as `.mmd`, or export the full project as `.dsmith.json` — code, summary, diagram type **and version history**, so a project file is a complete backup you can resume from. Import auto-detects the format and still reads older two-field project files
+- **🔌 Test Connection** — Verify your endpoint from Settings before spending a real request. Checks URL, CORS, credentials and model availability, and autocompletes the Model field from the endpoint's own list
 - **⚠️ Safe by Design** — Invalid Mermaid never overwrites a valid diagram, and an LLM response that carries no summary never overwrites the one you wrote
 - **✂️ Truncation Detection** — If the provider cuts a response short (token cap or content filter), you are told so explicitly instead of silently receiving half a diagram
 
@@ -109,6 +116,10 @@ src/
 │                                   # DIAGRAM_DISPLAY_NAMES, DIAGRAM_ICONS
 │
 └── utils/
+    ├── imageExport.ts              # SVG → standalone SVG / PNG blob, optional painted background,
+    │                               # download + clipboard helpers with feature detection
+    ├── projectFile.ts              # .dsmith.json build/parse with schema version, backward compatibility
+    │                               # with the original two-field format, and per-field validation
     ├── constants.ts                # Default templates (29 types), LLM config defaults, storage keys, system prompt builders
     │                               # (buildSystemPrompt for Action, buildAskSystemPrompt for Ask), diagram type detection
     │                               # (tryGetDiagramType → type | null, getDiagramType → type with fallback, DIAGRAM_DIRECTIVES
@@ -185,7 +196,9 @@ App
 
 ### Prerequisites
 
-- Node.js 18+ (tested with 20.x)
+- **Node.js 22.22.2+ or 24.15.0+** (tested with 24.x; CI runs 24.x)
+  — required by `jsdom` 30 and `undici` 8, which the test suite depends on. Node 20 installs without
+  error but fails at runtime with `webidl.util.markAsUncloneable is not a function`.
 - npm 9+
 
 ### Install
@@ -242,6 +255,10 @@ npm run deploy
 | **Model Name** | e.g., `gpt-4o-mini`, `gpt-4o`, `claude-3-sonnet` (if Anthropic-compatible proxy) |
 | **Temperature** | 0–2 (default: 0.3). Lower = more deterministic |
 | **Send Authorization Header** | When enabled (default), the API key is sent as a Bearer token in the `Authorization` header. Disable for local models or endpoints that don't require authentication. Persisted to localStorage. |
+| **🔌 Test Connection** | Validates the values currently typed in the form (not the last saved ones). Tries `GET /models` first — free and instant, and it proves URL, CORS, credentials and model availability at once. Endpoints that don't implement it fall back to a minimal chat completion, which tests the exact path the app uses. Failures are reported with the **same** messages a real request would produce. On success the Model field autocompletes from the endpoint's own model list. |
+
+> **Note:** the test runs in your browser, so it can only reach what your browser can reach. A
+> CORS-blocked endpoint fails the test exactly as it fails in real use — which is the point.
 
 ### Version History Settings (⚙️)
 
@@ -417,9 +434,36 @@ Syntax colors are themed via CSS custom properties (see [CSS Theming](#css-themi
 | Action | Format | Content |
 |--------|--------|---------|
 | Export .mmd | `.mmd` (plain text) | Mermaid syntax only |
-| Export Project | `.dsmith.json` (JSON) | `{ "mermaid": "...", "summary": "..." }` |
-| Import | `.mmd` or `.dsmith.json` | Auto-detects format; imports both mermaid and summary if available. JSON files (`.json`, `.dsmith.json`) are tried as project files first, falling back to `.mmd` import. |
+| Export Project | `.dsmith.json` (JSON) | Full backup — see the schema below |
+| Export SVG | `.svg` | Vector, self-contained, transparent background |
+| Export PNG — with background | `.png` | 2× raster, painted with the current theme's diagram background |
+| Export PNG — transparent | `.png` | 2× raster, transparent background |
+| Copy image to clipboard | Clipboard (PNG) | Always painted with the theme background — a transparent PNG pasted into a dark document looks broken. Requires a browser with `ClipboardItem` (Chrome/Edge; the menu item is disabled elsewhere) |
 | Copy | Clipboard | Mermaid syntax only |
+| Import | `.mmd` or `.dsmith.json` | Auto-detects format. JSON files are tried as project files first, falling back to `.mmd` import |
+
+### Project file schema
+
+```jsonc
+{
+  "version": 1,                    // absent in pre-versioning files; that is how they are detected
+  "exportedAt": "2026-08-21T...",
+  "mermaid": "...",
+  "summary": "...",
+  "diagramType": "flowchart",      // informational — the type is re-detected from the code on import
+  "versionHistory": { "snapshots": [ /* ... */ ], "activeIndex": 2 }
+}
+```
+
+Because multi-diagram support is deliberately out of scope, **this file is the way to keep more than
+one diagram**: export a project, and later import it to resume exactly where you left off.
+
+- **Older files still import.** The original `{ mermaid, summary }` format has no `version` field, and
+  that absence is what identifies it.
+- **Fields are validated independently.** A file with a corrupt version history still imports its
+  diagram and summary rather than failing outright.
+- **Importing history asks first**, because adopting the file's history replaces the one in this
+  browser. Cancelling imports the diagram and summary only.
 
 ---
 
@@ -487,7 +531,7 @@ All persisted data uses the following `localStorage` keys:
 
 ## Tests
 
-The project includes four Vitest suites (337 tests).
+The project includes five Vitest suites (351 tests), run in CI on every push and pull request.
 
 **`src/services/__tests__/diagramTypes.test.ts`** validates:
 
@@ -523,6 +567,14 @@ The project includes four Vitest suites (337 tests).
 3. `activeIndex` is clamped, including after entries are dropped
 4. Every writer returns `false` when the quota is exceeded
 
+**`src/utils/__tests__/projectFile.test.ts`** validates the backup format:
+
+1. Build → parse round-trips code, summary, diagram type and version history
+2. The original two-field `{ mermaid, summary }` files still import
+3. Malformed JSON, missing/empty `mermaid`, and non-object payloads are rejected
+4. A corrupt version history does not prevent the diagram importing
+5. Malformed snapshots are dropped, `activeIndex` is clamped, unknown diagram types ignored
+
 Run with:
 
 ```bash
@@ -533,4 +585,4 @@ npm run test
 
 ## License
 
-ISC
+[MIT](LICENSE) © Chaitanya V

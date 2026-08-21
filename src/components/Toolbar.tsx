@@ -15,6 +15,12 @@ interface ToolbarProps {
     onNewDiagram: (type: DiagramType) => void;
     onExportMermaid: () => void;
     onExportProject: () => void;
+    onExportSvg: () => void;
+    /** `background: true` paints the theme colour behind the diagram; false is transparent. */
+    onExportPng: (background: boolean) => void;
+    onCopyImage: () => void;
+    canCopyImage: boolean;
+    hasRenderedDiagram: boolean;
     onCopyMermaid: () => void;
     onImportMermaid: (content: string) => Promise<boolean>;
     onImportProject: (content: string) => Promise<boolean>;
@@ -34,6 +40,11 @@ export function Toolbar({
     onNewDiagram,
     onExportMermaid,
     onExportProject,
+    onExportSvg,
+    onExportPng,
+    onCopyImage,
+    canCopyImage,
+    hasRenderedDiagram,
     onCopyMermaid,
     onImportMermaid,
     onImportProject,
@@ -189,6 +200,58 @@ export function Toolbar({
                         <span className="me-2">📦</span>
                         Export Project (.dsmith.json)
                     </Dropdown.Item>
+
+                    <Dropdown.Divider />
+
+                    <Dropdown.Item
+                        disabled={!hasRenderedDiagram}
+                        onClick={() => {
+                            onExportSvg();
+                            setShowExportDropdown(false);
+                        }}
+                    >
+                        <span className="me-2">🖼️</span>
+                        Export SVG
+                    </Dropdown.Item>
+                    {/*
+                        Background is chosen per export rather than in Settings: a PNG
+                        for a dark document wants the theme colour behind it, one for a
+                        slide deck usually wants transparency.
+                    */}
+                    <Dropdown.Item
+                        disabled={!hasRenderedDiagram}
+                        onClick={() => {
+                            onExportPng(true);
+                            setShowExportDropdown(false);
+                        }}
+                    >
+                        <span className="me-2">🏞️</span>
+                        Export PNG — with background
+                    </Dropdown.Item>
+                    <Dropdown.Item
+                        disabled={!hasRenderedDiagram}
+                        onClick={() => {
+                            onExportPng(false);
+                            setShowExportDropdown(false);
+                        }}
+                    >
+                        <span className="me-2">⬜</span>
+                        Export PNG — transparent
+                    </Dropdown.Item>
+
+                    <Dropdown.Divider />
+
+                    <Dropdown.Item
+                        disabled={!hasRenderedDiagram || !canCopyImage}
+                        title={canCopyImage ? undefined : 'This browser cannot copy images to the clipboard'}
+                        onClick={() => {
+                            onCopyImage();
+                            setShowExportDropdown(false);
+                        }}
+                    >
+                        <span className="me-2">📸</span>
+                        Copy image to clipboard
+                    </Dropdown.Item>
                 </Dropdown.Menu>
             </Dropdown>
 
@@ -212,6 +275,7 @@ export function Toolbar({
                     className="btn btn-sm btn-outline-secondary"
                     onClick={onToggleTheme}
                     title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                    aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
                     {isDark ? '☀️' : '🌙'}
                 </button>
@@ -220,6 +284,7 @@ export function Toolbar({
                     className="btn btn-sm btn-outline-secondary"
                     onClick={onOpenSettings}
                     title="Settings"
+                    aria-label="Open settings"
                 >
                     ⚙️
                 </button>

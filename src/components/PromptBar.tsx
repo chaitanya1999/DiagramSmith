@@ -107,6 +107,8 @@ export function PromptBar({
             type="button"
             className={`btn prompt-bar-trigger w-100 text-center ${isLoading ? 'prompt-bar-loading' : ''}`}
             onClick={() => setStage('expanded')}
+            // Correct, not a stub: this trigger only renders while `stage !== 'expanded'`,
+            // so the bar is by definition collapsed whenever this button exists.
             aria-expanded={false}
             aria-label="Ask AI to modify diagram"
           >

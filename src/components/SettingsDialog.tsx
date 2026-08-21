@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { LlmConfig } from '../types';
-import { Modal, Button, Form } from 'react-bootstrap';
+import { Modal, Button, Form, Spinner } from 'react-bootstrap';
+import { testConnection } from '../services/llm';
+import type { ConnectionTestResult } from '../services/llm';
 
 interface SettingsDialogProps {
   show: boolean;
@@ -18,6 +20,26 @@ export function SettingsDialog({ show, config, maxSnapshots: currentMaxSnapshots
   const [temperature, setTemperature] = useState(config.temperature.toString());
   const [sendAuthorization, setSendAuthorization] = useState(config.sendAuthorization);
   const [maxSnapshots, setMaxSnapshots] = useState(() => currentMaxSnapshots.toString());
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
+
+  /** Tests the values currently typed into the form, not the last saved ones. */
+  const handleTestConnection = useCallback(async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testConnection({
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim(),
+        model: model.trim(),
+        temperature: parseFloat(temperature) || 0,
+        sendAuthorization,
+      });
+      setTestResult(result);
+    } finally {
+      setIsTesting(false);
+    }
+  }, [baseUrl, apiKey, model, temperature, sendAuthorization]);
 
   useEffect(() => {
     setBaseUrl(config.baseUrl);
@@ -26,6 +48,7 @@ export function SettingsDialog({ show, config, maxSnapshots: currentMaxSnapshots
     setTemperature(config.temperature.toString());
     setSendAuthorization(config.sendAuthorization);
     setMaxSnapshots(currentMaxSnapshots.toString());
+    setTestResult(null);
   }, [config, currentMaxSnapshots, show]);
 
   const handleSave = () => {
@@ -89,7 +112,16 @@ export function SettingsDialog({ show, config, maxSnapshots: currentMaxSnapshots
               value={model}
               onChange={(e) => setModel(e.target.value)}
               placeholder="gpt-4o-mini"
+              list="llm-model-suggestions"
             />
+            {/* Populated from GET /models when the test succeeds, so the field autocompletes. */}
+            {testResult?.models && testResult.models.length > 0 && (
+              <datalist id="llm-model-suggestions">
+                {testResult.models.map((id) => (
+                  <option key={id} value={id} />
+                ))}
+              </datalist>
+            )}
           </Form.Group>
 
           <Form.Group className="mb-3">
@@ -117,6 +149,34 @@ export function SettingsDialog({ show, config, maxSnapshots: currentMaxSnapshots
           <Form.Text className="text-muted d-block mb-3" style={{ marginTop: '-0.5rem' }}>
             When enabled, the API key is sent as a Bearer token. Disable for local models (e.g., Ollama, LM Studio) that don't require authentication.
           </Form.Text>
+
+          <div className="d-flex align-items-center gap-2 mb-2">
+            <Button
+              variant="outline-primary"
+              size="sm"
+              onClick={handleTestConnection}
+              disabled={isTesting || !baseUrl.trim() || !model.trim()}
+            >
+              {isTesting ? (
+                <>
+                  <Spinner animation="border" size="sm" className="me-1" /> Testing…
+                </>
+              ) : (
+                '🔌 Test Connection'
+              )}
+            </Button>
+          </div>
+          {testResult && (
+            <div
+              className={`small mb-3 p-2 rounded border ${
+                testResult.ok ? 'border-success text-success' : 'border-danger text-danger'
+              }`}
+              role="status"
+            >
+              {testResult.ok ? '✅ ' : '❌ '}
+              {testResult.message}
+            </div>
+          )}
 
           <hr />
           <h6 className="mb-3 text-muted">Version History</h6>

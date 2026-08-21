@@ -63,7 +63,7 @@ export function saveLlmConfig(config: LlmConfig): boolean {
  * at runtime, and a malformed entry or an out-of-range activeIndex crashes the render
  * on every load — which localStorage then reproduces forever.
  */
-function isValidSnapshot(value: unknown): value is DiagramSnapshot {
+export function isValidSnapshot(value: unknown): value is DiagramSnapshot {
   if (!value || typeof value !== 'object') return false;
   const s = value as Record<string, unknown>;
   return (

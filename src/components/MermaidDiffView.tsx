@@ -102,6 +102,9 @@ export function MermaidDiffView({ original, modified, theme }: MermaidDiffViewPr
       mergeView.destroy();
       mergeViewRef.current = null;
     };
+  // Mount-only by design: the MergeView is built once. Later changes to `original`,
+  // `modified` and `theme` are dispatched into the existing view by the effects
+  // below, which avoids tearing down the diff and losing scroll position.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

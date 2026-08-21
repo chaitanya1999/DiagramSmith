@@ -141,6 +141,50 @@ function buildHttpError(status: number, body: string): LlmError {
   return new LlmError(`API error (${status}): ${detail}`, 'network_error');
 }
 
+function buildHeaders(config: LlmConfig): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.sendAuthorization !== false && config.apiKey) {
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+  }
+  return headers;
+}
+
+function apiUrl(config: LlmConfig, path: string): string {
+  return `${config.baseUrl.replace(/\/+$/, '')}${path}`;
+}
+
+/**
+ * Normalises anything thrown during a request into an LlmError. Shared so the
+ * connection test reports failures in exactly the same words as a real request.
+ */
+function toLlmError(e: unknown, signal?: AbortSignal): LlmError {
+  if (e instanceof LlmError) return e;
+
+  // Check the signal rather than the rejection value: `abort(reason)` rejects
+  // with the reason itself, which is not a DOMException when a reason is given.
+  if (signal?.aborted) {
+    if (signal.reason === ABORT_REASON_TIMEOUT) {
+      return new LlmError('Request timed out. The model took too long to respond.', 'timeout');
+    }
+    return new LlmError('Request cancelled.', 'cancelled');
+  }
+
+  // Chrome: "Failed to fetch" · Firefox: "NetworkError when attempting to fetch
+  // resource." · Safari: "Load failed". Matching on the message misses Safari,
+  // so treat any TypeError out of fetch as a network failure.
+  if (e instanceof TypeError) {
+    return new LlmError(
+      'Network error. Please check your Base URL and ensure the API is reachable.',
+      'network_error'
+    );
+  }
+
+  return new LlmError(
+    `Unexpected error: ${e instanceof Error ? e.message : 'Unknown error'}`,
+    'network_error'
+  );
+}
+
 /**
  * Single transport for both Action and Ask modes. Everything below the prompt
  * construction is identical between them, so it lives here once.
@@ -157,16 +201,9 @@ async function callChatCompletion(
       temperature: config.temperature,
     };
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (config.sendAuthorization !== false && config.apiKey) {
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
-    }
-
-    const response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+    const response = await fetch(apiUrl(config, '/chat/completions'), {
       method: 'POST',
-      headers,
+      headers: buildHeaders(config),
       body: JSON.stringify(requestBody),
       signal,
     });
@@ -210,31 +247,77 @@ async function callChatCompletion(
       truncated: finishReason === 'length' || finishReason === 'content_filter',
     };
   } catch (e: unknown) {
-    if (e instanceof LlmError) throw e;
+    throw toLlmError(e, signal);
+  }
+}
 
-    // Check the signal rather than the rejection value: `abort(reason)` rejects
-    // with the reason itself, which is not a DOMException when a reason is given.
-    if (signal?.aborted) {
-      if (signal.reason === ABORT_REASON_TIMEOUT) {
-        throw new LlmError('Request timed out. The model took too long to respond.', 'timeout');
-      }
-      throw new LlmError('Request cancelled.', 'cancelled');
+export interface ConnectionTestResult {
+  ok: boolean;
+  message: string;
+  /** Model ids the endpoint advertises, when it implements GET /models. */
+  models?: string[];
+}
+
+/** Returns null when the endpoint simply does not implement GET /models. */
+async function listModels(config: LlmConfig, signal?: AbortSignal): Promise<string[] | null> {
+  const response = await fetch(apiUrl(config, '/models'), {
+    method: 'GET',
+    headers: buildHeaders(config),
+    signal,
+  });
+
+  // Plenty of OpenAI-compatible proxies only implement /chat/completions.
+  if (response.status === 404 || response.status === 405 || response.status === 501) return null;
+
+  if (!response.ok) {
+    throw buildHttpError(response.status, await response.text().catch(() => ''));
+  }
+
+  const data = await response.json().catch(() => null);
+  const entries = (data as { data?: unknown } | null)?.data;
+  if (!Array.isArray(entries)) return null;
+
+  return entries
+    .map((entry) => (entry as { id?: unknown })?.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
+/**
+ * Verifies the configured endpoint before the user spends a real request on it.
+ *
+ * Tries GET /models first — free, instant, and it proves URL, CORS, credentials and
+ * model availability in one call. Falls back to a minimal completion for endpoints
+ * that don't implement it, which tests the exact path the app actually uses.
+ */
+export async function testConnection(
+  config: LlmConfig,
+  signal?: AbortSignal
+): Promise<ConnectionTestResult> {
+  if (!config.baseUrl.trim()) {
+    return { ok: false, message: 'Enter a Base URL first.' };
+  }
+  if (!config.model.trim()) {
+    return { ok: false, message: 'Enter a model name first.' };
+  }
+
+  try {
+    const models = await listModels(config, signal);
+
+    if (models && models.length > 0) {
+      const available = models.includes(config.model);
+      return {
+        ok: true,
+        models,
+        message: available
+          ? `Connected. Model "${config.model}" is available.`
+          : `Connected, but "${config.model}" is not among the ${models.length} models this endpoint lists.`,
+      };
     }
 
-    // Chrome: "Failed to fetch" · Firefox: "NetworkError when attempting to fetch
-    // resource." · Safari: "Load failed". Matching on the message misses Safari,
-    // so treat any TypeError out of fetch as a network failure.
-    if (e instanceof TypeError) {
-      throw new LlmError(
-        'Network error. Please check your Base URL and ensure the API is reachable.',
-        'network_error'
-      );
-    }
-
-    throw new LlmError(
-      `Unexpected error: ${e instanceof Error ? e.message : 'Unknown error'}`,
-      'network_error'
-    );
+    await callChatCompletion([{ role: 'user', content: 'Reply with OK.' }], config, signal);
+    return { ok: true, message: `Connected. Model "${config.model}" responded.` };
+  } catch (e) {
+    return { ok: false, message: toLlmError(e, signal).message };
   }
 }
 

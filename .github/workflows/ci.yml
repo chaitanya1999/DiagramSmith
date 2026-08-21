@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Must satisfy jsdom's engines (^22.22.2 || ^24.15.0 || >=26.0.0) and
+      # undici's (>=22.19.0). Node 20 installs without error — npm only warns on
+      # engine mismatches — then fails at runtime with
+      # "webidl.util.markAsUncloneable is not a function".
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm run test
+
+      # `npm run build` runs `tsc -b` first, which uses tsconfig.app.json and
+      # catches errors the flat `tsc --noEmit` above does not (project references
+      # differ). Keep both.
+      - name: Build
+        run: npm run build
