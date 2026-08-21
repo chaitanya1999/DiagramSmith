@@ -4,8 +4,49 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/DiagramSmith/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DiagramSmith</title>
-    <script type="module" crossorigin src="/DiagramSmith/assets/index-CKndxGPw.js"></script>
+    <!--
+      Defence in depth behind Mermaid's securityLevel: 'strict'.
+      connect-src stays open because the whole point of the app is that you bring
+      your own LLM endpoint — the host is whatever you type into Settings.
+      style-src needs 'unsafe-inline' because Mermaid writes inline styles into its
+      SVG and Bootstrap/CodeMirror inject stylesheets at runtime.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self';
+               style-src 'self' 'unsafe-inline';
+               img-src 'self' data: blob:;
+               font-src 'self' data:;
+               connect-src *;
+               object-src 'none';
+               base-uri 'self';
+               form-action 'none';
+               frame-ancestors 'none'"
+    />
+    <title>DiagramSmith — AI-assisted Mermaid diagram editor</title>
+    <meta
+      name="description"
+      content="Edit Mermaid.js diagrams iteratively with natural language. Bring your own OpenAI-compatible key. Fully client-side, no backend."
+    />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="DiagramSmith" />
+    <meta property="og:title" content="DiagramSmith — AI-assisted Mermaid diagram editor" />
+    <meta
+      property="og:description"
+      content="Edit Mermaid.js diagrams iteratively with natural language. Bring your own OpenAI-compatible key. Fully client-side, no backend."
+    />
+    <meta property="og:url" content="https://chaitanya1999.github.io/DiagramSmith/" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="DiagramSmith — AI-assisted Mermaid diagram editor" />
+    <meta
+      name="twitter:description"
+      content="Edit Mermaid.js diagrams iteratively with natural language. Bring your own OpenAI-compatible key. Fully client-side, no backend."
+    />
+    <!-- TODO: add og:image / twitter:image once launch screenshots exist (see claude-plan3-screenshots.md) -->
+    <script type="module" crossorigin src="/DiagramSmith/assets/index-D5HSYpN5.js"></script>
     <link rel="stylesheet" crossorigin href="/DiagramSmith/assets/index-CFt6O3ed.css">
   </head>
   <body>
