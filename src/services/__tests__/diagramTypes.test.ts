@@ -130,6 +130,40 @@ describe('Flowchart node shapes', () => {
   });
 });
 
+// Some wrong syntax still parses: it just renders as literal text. These read the
+// parsed model to prove each template means what it looks like.
+describe('Templates parse into the intended structure', () => {
+  async function getDb(code: string) {
+    const diagram = await mermaid.mermaidAPI.getDiagramFromText(code);
+    return diagram.db as unknown as Record<string, () => unknown>;
+  }
+
+  beforeAll(() => {
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+  });
+
+  it('kanban columns and tasks get real ids and labels', async () => {
+    const { nodes } = (await getDb(DEFAULT_TEMPLATES.kanban)).getData() as {
+      nodes: { id: string; label: string; parentId?: string }[];
+    };
+    expect(nodes).toContainEqual(expect.objectContaining({ id: 'todo', label: 'Todo' }));
+    expect(nodes).toContainEqual(
+      expect.objectContaining({ id: 'task1', label: 'Write code', parentId: 'todo' }),
+    );
+  });
+
+  it('the tree view has no literal "root" node and an unquoted title', async () => {
+    const db = await getDb(DEFAULT_TEMPLATES.treeView);
+    expect(db.getDiagramTitle()).toBe('File System');
+    const root = db.getRoot() as { children: { name: string; nodeType: string }[] };
+    expect(root.children[0]).toMatchObject({ name: 'project', nodeType: 'directory' });
+  });
+
+  it('the venn title is displayed without quotes', async () => {
+    expect((await getDb(DEFAULT_TEMPLATES.venn)).getDiagramTitle()).toBe('Team overlap');
+  });
+});
+
 describe('Template hygiene', () => {
   // Whitespace-only lines are invisible in the editor but are sent verbatim to
   // the LLM, which may copy them back. Empty lines are fine; padded ones are not.

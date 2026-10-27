@@ -150,13 +150,13 @@ export const DEFAULT_TEMPLATES: Record<DiagramType, string> = {
     32-63: "Sequence Number"
     64-95: "Acknowledgment Number"`,
 	kanban: `kanban
-    column Todo
-      task1: Write code
-      task2: Review code
-    column Doing
-      task3: Test feature
-    column Done
-      task4: Ship it`,
+    todo[Todo]
+      task1[Write code]
+      task2[Review code]
+    doing[Doing]
+      task3[Test feature]
+    done[Done]
+      task4[Ship it]`,
 	architecture: `architecture-beta
     group api(cloud)[API]
     service db(database)[Database] in api
@@ -185,7 +185,7 @@ export const DEFAULT_TEMPLATES: Record<DiagramType, string> = {
         "Shirts": 40
         "Pants": 40`,
 	venn: `venn-beta
-    title "Team overlap"
+    title Team overlap
     set Frontend
     set Backend
     union Frontend,Backend["APIs"]`,
@@ -228,15 +228,15 @@ chaotic
 
 clear --> chaotic : "Complacency"`,
 	treeView: `treeView-beta
-    title "File System"
-    root "Project"
-      "src"
-        "components"
-          "App.tsx"
-        "utils"
-          "helpers.ts"
-      "public"
-        "index.html"`,
+    title File System
+    project/
+      src/
+        components/
+          App.tsx
+        utils/
+          helpers.ts
+      public/
+        index.html`,
 };
 
 export interface SystemPromptOptions {
