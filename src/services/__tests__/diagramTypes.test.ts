@@ -85,6 +85,51 @@ describe('Syntax guide examples', () => {
   });
 });
 
+describe('Flowchart node shapes', () => {
+  const guide = DIAGRAM_SYNTAX_GUIDES.flowchart;
+  const line = (prefix: string) => guide.split('\n').find((l) => l.startsWith(prefix))!;
+
+  // "A[(text)] database/cylinder" → "A[(text)]"
+  const bracketForms = line('- Nodes:')
+    .slice('- Nodes:'.length)
+    .split(',')
+    .map((entry) => entry.trim().split(' ')[0]);
+
+  // "sm-circ (small start), brace / brace-r (comment)" → ["sm-circ", "brace", "brace-r"]
+  const shapeNames = line('- More shapes')
+    .split('):')[1]
+    .replace(/\([^)]*\)/g, '')
+    .split(/[,/]/)
+    .map((name) => name.trim());
+
+  beforeAll(() => {
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
+  });
+
+  it('lists every classic bracket form', () => {
+    expect(bracketForms).toHaveLength(14);
+  });
+
+  // Together with the bracket forms, this covers every flowchart shape in Mermaid 11.16.
+  it('lists every shape that has no bracket form', () => {
+    expect(shapeNames).toHaveLength(32);
+  });
+
+  // An unlisted or misspelled shape teaches the LLM syntax that fails to render.
+  it.each(bracketForms)('the bracket form %s parses', async (form) => {
+    const result = await mermaid.parse(`flowchart TD\n  ${form} --> B`, { suppressErrors: true });
+    expect(result).not.toBe(false);
+  });
+
+  // The flowchart parser throws "No such shape" for unknown names, so this also
+  // catches a shape that a future Mermaid upgrade renames or drops.
+  it.each(shapeNames)('the shape name %s parses', async (name) => {
+    const code = `flowchart TD\n  A@{ shape: ${name}, label: "text" } --> B`;
+    const result = await mermaid.parse(code, { suppressErrors: true });
+    expect(result).not.toBe(false);
+  });
+});
+
 describe('Template hygiene', () => {
   // Whitespace-only lines are invisible in the editor but are sent verbatim to
   // the LLM, which may copy them back. Empty lines are fine; padded ones are not.

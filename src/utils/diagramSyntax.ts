@@ -9,14 +9,15 @@ import type { DiagramType } from '../types';
 export const DIAGRAM_SYNTAX_GUIDES: Record<DiagramType, string> = {
 	flowchart: `FLOWCHART SYNTAX:
 - First line: flowchart TD (top-down) or flowchart LR (left-right)
-- Nodes: A[text] rectangle, A(text) rounded, A{text} diamond, A((text)) circle, A>text] asymmetric
+- Nodes: A[text] rectangle, A(text) rounded, A([text]) stadium, A[[text]] subroutine, A[(text)] database/cylinder, A((text)) circle, A(((text))) double circle, A>text] asymmetric, A{text} diamond, A{{text}} hexagon, A[/text/] parallelogram, A[\\text\\] parallelogram alt, A[/text\\] trapezoid, A[\\text/] trapezoid alt
+- More shapes (no bracket form; use A@{ shape: name, label: "text" }): sm-circ (small start), fr-circ (stop), f-circ (junction), cross-circ (summary), datastore, text (text block), notch-rect (card), lin-rect (lined process), div-rect (divided process), st-rect (multi-process), tag-rect (tagged process), sl-rect (manual input), bow-rect (stored data), doc (document), lin-doc (lined document), docs (multi-document), tag-doc (tagged document), h-cyl (direct access storage), lin-cyl (disk storage), curv-trap (display), delay, tri (extract), flip-tri (manual file), win-pane (internal storage), notch-pent (loop limit), flag (paper tape), bolt (com link), hourglass (collate), fork (fork/join bar), brace / brace-r / braces (comment)
 - Edges: A --> B, A --- B, A -->|label| B, A -.-> B (dotted), A ==> B (thick), A --o B, A --x B
 - Subgraphs: subgraph id [Title] ... end
 - Example:
   flowchart TD
-    A[Start] --> B{Decision}
-    B -->|Yes| C[OK]
-    B -->|No| D[End]`,
+    A([Start]) --> B{Decision}
+    B -->|Yes| C@{ shape: doc, label: "Report" }
+    B -->|No| D[(Archive)]`,
 
 	sequenceDiagram: `SEQUENCE DIAGRAM SYNTAX:
 - First line: sequenceDiagram
@@ -422,7 +423,7 @@ export const DIAGRAM_SYNTAX_GUIDES: Record<DiagramType, string> = {
 export const DIAGRAM_RULES: Record<DiagramType, string> = {
 	flowchart: `FLOWCHART RULES:
 - Node IDs are alphanumeric/underscore with no spaces. Reuse existing IDs exactly; never rename or renumber them.
-- Quote new node text only if it contains [ ] { } ( ) " or a colon.
+- Quote new node text only if it contains [ ] { } ( ) " or a colon. In the A@{ shape: name, label: "text" } form the label is always double-quoted.
 - Edge label pipes take no padding spaces: -->|Yes| not --> | Yes |`,
 
 	sequenceDiagram: `SEQUENCE DIAGRAM RULES:
